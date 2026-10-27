@@ -33,8 +33,10 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import threading
 import time
+from pathlib import Path
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE, "data")
@@ -1075,6 +1077,74 @@ def api_template_delete():
 
 # ---------------------------------------------------------------- export
 
+def _sibling_module(name):
+    """webapp/<name>.py, loaded from beside this file and cached in
+    sys.modules. Going by path rather than by name works however the server
+    was started: run.py, `python server.py`, gunicorn, or a wsgi file that
+    loads server.py by path (where neither `webapp` nor webapp/ is on
+    sys.path)."""
+    key = f"sitescribe_webapp_{name}"
+    mod = sys.modules.get(key)
+    if mod is None:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(key, os.path.join(BASE, f"{name}.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        sys.modules[key] = mod
+    return mod
+
+
+def _visit_date(entry):
+    """The project's creation time in the site's zone, else now."""
+    try:
+        when = datetime.datetime.fromisoformat(str(entry.get("created")).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return _local()
+    return when.astimezone(LOCAL_TZ) if when.tzinfo else when
+
+
+def _module_report(data, pid):
+    """The report from sitescribe.word_report, with the visit converted by
+    bridge.to_project(). None when the module is not built yet
+    (NotImplementedError) or cannot run, so the built-in report below takes
+    over and the user still gets a file; the reason goes to stderr.
+    Raises ImportError only when python-docx itself is missing."""
+    try:
+        bridge = _sibling_module("bridge")
+        from sitescribe import word_report
+    except (ImportError, OSError) as exc:
+        print(f"[sitescribe] word_report unavailable ({exc!r}); "
+              "exporting built-in report", file=sys.stderr)
+        return None
+    entry = find_project(load_index(), pid) or {}
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            project = bridge.to_project(
+                data,
+                name=entry.get("name") or pid,
+                item_dir=lambda item_id: item_dir(item_id, pid),
+                plans_dir=plans_dir(pid),
+                work_dir=Path(tmp) / "plans",
+                template=template_path(pid) if has_template(data, pid) else None,
+                visit_date=_visit_date(entry),
+                tz=LOCAL_TZ,
+            )
+            out = word_report.build_report(project, Path(tmp) / "site_visit_report.docx")
+            return io.BytesIO(Path(out).read_bytes())
+        except NotImplementedError:
+            return None
+        except ImportError as exc:
+            if "python-docx" in str(exc):
+                raise
+            print(f"[sitescribe] word_report needs a package ({exc}); "
+                  "exporting built-in report", file=sys.stderr)
+            return None
+        except Exception as exc:
+            print(f"[sitescribe] word_report failed ({exc!r}); "
+                  "exporting built-in report", file=sys.stderr)
+            return None
+
+
 def styled(doc, text, *candidates):
     """Add a paragraph using the first style the document actually has.
 
@@ -1209,8 +1279,13 @@ def _to_buffer(doc):
 
 
 def _report_buffer(data, pid):
-    """The Word report as a buffer: in the template if there is one, else plain.
+    """The Word report as a buffer: sitescribe.word_report's when it can run,
+    else the built-in one below, in the template if there is one, else plain.
     Raises ImportError when python-docx is missing."""
+    buf = _module_report(data, pid)
+    if buf is not None:
+        return buf
+
     from docx import Document
     from docx.shared import Inches, Pt
 

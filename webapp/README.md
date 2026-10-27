@@ -50,6 +50,15 @@ A legacy single-visit `data/visit.json` is migrated into `P-001` on first
 start — files moved, stored URLs re-prefixed, original mtime preserved. It is
 idempotent.
 
+## Word export
+
+`GET /api/export/docx` converts the visit with `webapp/bridge.py` (`to_project`)
+and hands it to `sitescribe.word_report.build_report`: header, summary, pinned
+plan sheets, one ITEM block per included entry with its photo and caption,
+action items, photo log. Only plans with a pin are rendered. If the module
+raises, the reason is logged to stderr and the built-in python-docx report
+below ships instead, so the user always gets a file.
+
 ## Report template (formatting only)
 
 Upload your firm's Word template with the **Template** button and the export

@@ -64,7 +64,7 @@ tags, include-in-report
 
 Export gives a Word report of the included items, in the firm's template if one was uploaded for that report. Details of the data model, routes and config are in [webapp/README.md](webapp/README.md).
 
-Today the routes do their work inline (Whisper call, plain python-docx report). The integration step wires each route to its `sitescribe/` module through a small adapter, `webapp/bridge.py`, keeping the inline code as the fallback, so a module that is not written yet never breaks the app. The route-by-route map is in [INTEGRATION_PLAN.md](INTEGRATION_PLAN.md).
+Each route calls its `sitescribe/` module through a small adapter, `webapp/bridge.py`, keeping the inline code as the fallback, so a module that is not written yet never breaks the app. Word export already goes through `word_report.build_report`; the other routes still do their work inline (Whisper call) until their modules land. The route-by-route map is in [INTEGRATION_PLAN.md](INTEGRATION_PLAN.md).
 
 ## Code layout
 
@@ -80,10 +80,10 @@ The web app only calls functions in the `sitescribe/` package. Each module has i
 | `sitescribe/locate.py` | on site | GPS → pin on the plan | |
 | `sitescribe/ai_writer.py` | after | AI summary, cleaned-up captions, action items | |
 | `sitescribe/plan_markup.py` | after | Plan set PDF with color-coded numbered pins | |
-| `sitescribe/word_report.py` | after | The Word report | |
+| `sitescribe/word_report.py` | after | The Word report | GFDS-PC |
 | `webapp/server.py` | all | Flask routes, PIN login, storage, Word export fallback | tshoseints |
 | `webapp/templates/` | all | Landing page and capture UI | tshoseints |
-| `webapp/bridge.py` | all | JSON ⇄ `models.py` adapter (coming with the integration PR) | RBB007 |
+| `webapp/bridge.py` | all | JSON ⇄ `models.py` adapter; feeds `word_report` at export | RBB007 |
 | `run.py` | all | Starts the web app from the repo root | RBB007 |
 
 ## Team
