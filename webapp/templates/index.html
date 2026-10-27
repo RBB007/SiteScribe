@@ -443,6 +443,8 @@ async function onPicked(ev){
   const f = ev.target.files[0]; if (!f || !item()) return;
   ev.target.value = "";
   const fd = new FormData(); fd.append("photo", f);
+  /* name the entry: without it the server would pick the oldest imageless one */
+  const target = entry(); if (target && !target.filename) fd.append("photo_id", target.photo_id);
   say("Uploading photo…","warn");
   const e = await api(`/api/item/${item().item_id}/photo`, {method:"POST", body:fd});
   const it = item(), at = it.photos.findIndex(p => p.photo_id === e.photo_id);

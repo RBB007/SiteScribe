@@ -245,7 +245,8 @@ def load(pid=None):
     data.setdefault("plans", [])
     data.setdefault("template", None)
     data["items"] = [it for it in data["items"] if isinstance(it, dict)]
-    if needs_upgrade(data):
+    upgraded = needs_upgrade(data)
+    if upgraded:
         upgrade_items(data, pid)
     # backfill fields added after some records were written, so an older
     # visit.json never 500s or silently drops data
@@ -266,6 +267,14 @@ def load(pid=None):
             p.setdefault("location", None)
             p.setdefault("audio_clips", [])
             p.setdefault("created", it["created"])
+    if upgraded:
+        # persist immediately: the upgrade already moved files on disk, so a
+        # read must not leave the json describing the old layout
+        try:
+            save(data, pid)
+        except OSError as exc:
+            print(f"[sitescribe] could not persist upgrade for {pid}: {exc}",
+                  file=sys.stderr)
     return data
 
 
@@ -743,13 +752,25 @@ def api_photo_add(item_id):
     if (not f or not f.filename) and mode is None:
         raise ApiError("no photo uploaded")
     pid = current_pid()
+    # The caller may name the entry the image belongs to. Without it an upload
+    # would land on the oldest imageless entry, which is the wrong one as soon
+    # as a Keep/Clear entry is waiting ahead of it.
+    target_id = (request.form.get("photo_id")
+                 or (request.get_json(silent=True) or {}).get("photo_id")
+                 or request.args.get("photo_id"))
     with _lock:
         data = load()
         item = need_item(data, item_id)
         entry = None
         if f and f.filename:
-            # an image fills the waiting entry rather than opening another
-            entry = next((e for e in sorted_entries(item) if not e.get("filename")), None)
+            if target_id:
+                entry = need_photo(item, target_id)
+                if entry.get("filename"):
+                    raise ApiError(f"{target_id} already has an image")
+            else:
+                # newest imageless entry, not the oldest
+                entry = next((e for e in reversed(sorted_entries(item))
+                              if not e.get("filename")), None)
         if entry is None:
             entry = new_entry(item, **_seed_from_previous(item, mode))
             item.setdefault("photos", []).append(entry)
@@ -1339,21 +1360,24 @@ def upgrade_items(data, pid):
             entries.append(_upgraded_entry(f"{new_id}_01", 1, shared, pid,
                                            dir_name, None, created=created))
 
-        # one clip file can only carry one name, so the entries of a
-        # multi-photo item share it while each keeps its own clip_id
-        first = entries[0]["photo_id"]
-        renamed = [(n, _reprefix(d, c.get("filename"), f"{first}_A{n:02d}"), c)
-                   for n, c in enumerate(clips, 1)]
-        for e in entries:
-            e["audio_clips"] = [
-                {"clip_id": f"{e['photo_id']}_A{n:02d}",
-                 "filename": name,
-                 "url": (f"/uploads/{pid}/{dir_name}/{name}" if pid and name
-                         else c.get("url")),
-                 "bytes": int(c.get("bytes") or 0),
-                 "transcript": c.get("transcript") or "",
-                 "created": c.get("created") or e["created"]}
-                for n, name, c in renamed]
+        # A clip file can only carry one name. Giving every entry a record that
+        # points at the same file leaves dangling records as soon as one is
+        # deleted, so the clips attach to the first entry only.
+        first = entries[0]
+        first["audio_clips"] = [
+            {"clip_id": f"{first['photo_id']}_A{n:02d}",
+             "filename": _reprefix(d, c.get("filename"),
+                                   f"{first['photo_id']}_A{n:02d}"),
+             "url": None,
+             "bytes": int(c.get("bytes") or 0),
+             "transcript": c.get("transcript") or "",
+             "created": c.get("created") or first["created"]}
+            for n, c in enumerate(clips, 1)]
+        for clip in first["audio_clips"]:
+            clip["url"] = (f"/uploads/{pid}/{dir_name}/{clip['filename']}"
+                           if pid and clip["filename"] else None)
+        for e in entries[1:]:
+            e["audio_clips"] = []
 
         it["photos"] = entries
     return data

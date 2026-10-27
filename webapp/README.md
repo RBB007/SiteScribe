@@ -73,12 +73,18 @@ the plain format.
 ## Data model
 
 ```
-Item   I-001          include · description · importance · tags · location? · audio?
-  └ Photo  I-001-P-01   caption
-  └ Photo  I-001-P-02
-  └ Audio  I-001-A-01   kept whether or not it was transcribed
-Item   I-002
+Item   001                     a numbering group only
+  └ Photo 001_01   THE INCIDENT: photo? · description · location ·
+  │                importance · tags · include · audio_clips[]
+  └ Photo 001_02
+  └ Audio 001_01_A01
+Item   002
 ```
+
+999 items x 99 photos per item. **The incident is the photo entry, not the
+item** - an item is just a container. A photo entry may have no image yet
+(`filename: null`), so a voice note or a plan pin can be recorded before the
+picture is taken; the export skips the image for those.
 
 Photo IDs are scoped to their item, so `I-001-P-02` identifies both at once —
 useful when embedding the ID into the photo and when placing it in the report.
@@ -107,6 +113,17 @@ Two independent paths, so the app never depends on a paid key:
 If neither is available, the phone keyboard's own mic key dictates into the
 description box with no code at all.
 
+## Adding a photo
+
+`POST /api/item/<id>/photo` with `inherit`:
+
+- `keep` - copies `description`, `location`, `importance` and `tags` from the
+  previous entry. The photo and the audio are never copied.
+- `clear` (or `new`) - a blank entry.
+
+An upload should send `photo_id` naming the entry it belongs to. Without it the
+server picks the **newest** imageless entry.
+
 ## Severity
 
 `Info · Minor · Major · Critical · Safety` — from the Summary slide.
@@ -117,12 +134,13 @@ description box with no code at all.
 |---|---|
 | `GET /api/visit` | all items + plans |
 | `POST /api/item` | new item |
-| `PATCH /api/item/<id>` | description, importance, tags, include, location |
+| `PATCH /api/item/<id>` | nothing editable (the fields moved to the entry) |
 | `DELETE /api/item/<id>` | remove item + its uploads |
-| `POST /api/item/<id>/photo` | multipart `photo` |
-| `PATCH/DELETE /api/item/<id>/photo/<pid>` | caption / remove |
-| `POST /api/item/<id>/audio` | multipart `audio` + `transcribe=true\|false`; always stores the clip, returns it; fills description **only if empty** |
-| `DELETE /api/item/<id>/audio/<clip_id>` | delete one recording |
+| `POST /api/item/<id>/photo` | multipart `photo` (+ `photo_id` to name the target entry), or `inherit=keep\|clear` to add an entry |
+| `PATCH /api/item/<id>/photo/<pid>` | `caption, description, importance, tags, include, location` |
+| `DELETE /api/item/<id>/photo/<pid>` | remove the entry and its files |
+| `POST /api/item/<id>/photo/<pid>/audio` | multipart `audio` + `transcribe=true\|false` |
+| `DELETE /api/item/<id>/photo/<pid>/audio/<clip_id>` | remove one recording |
 | `POST /api/plan` | multipart `plan` (pdf/image) |
 | `GET /api/export/docx` | Word report of **included** items only |
 | `GET /health` | public, no PIN |
