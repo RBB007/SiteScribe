@@ -471,7 +471,7 @@ let tT; $('tags').oninput = () => { clearTimeout(tT); tT = setTimeout(()=>
 
 /* ---------------- dictation ---------------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let sr=null, dictating=false, baseText="";
+let sr=null, dictating=false, baseText="", finalText="";
 if (!SR) $('btnDictate').title = "This browser has no speech recognition";
 
 $('btnDictate').onclick = () => {
@@ -480,27 +480,37 @@ $('btnDictate').onclick = () => {
     $('recMsg').textContent="No browser dictation — use the mic key on your keyboard."; return; }
   if (dictating){ sr.stop(); return; }
   sr = new SR(); sr.lang="en-US"; sr.continuous=true; sr.interimResults=true;
-  baseText = $('desc').value; if (baseText && !baseText.endsWith(" ")) baseText += " ";
+  baseText = $('desc').value.trimEnd(); if (baseText) baseText += " ";
+  finalText = "";
   sr.onstart = () => { dictating=true; $('btnDictate').textContent="■ Stop dictating";
     $('recMsg').className="msg warn"; $('recMsg').textContent="Listening — speak now."; };
+  /* Rebuild from the whole results list every time. Several mobile browsers
+     report resultIndex as 0 on every event, so appending incrementally
+     re-adds words that were already final ("can you / can you see / ..."). */
   sr.onresult = ev => {
-    let fin="", interim="";
-    for (let i=ev.resultIndex;i<ev.results.length;i++){
+    let fin = "", interim = "";
+    for (let i = 0; i < ev.results.length; i++) {
       const t = ev.results[i][0].transcript;
-      if (ev.results[i].isFinal) fin += t; else interim += t;
+      if (ev.results[i].isFinal) fin += t.trim() + " "; else interim += t;
     }
-    if (fin) baseText += fin + " ";
-    $('desc').value = baseText + interim;
+    finalText = fin;
+    $('desc').value = (baseText + fin + interim).replace(/\s+/g, " ").trimStart();
   };
   sr.onerror = ev => { $('recMsg').className="msg bad";
     $('recMsg').textContent = ev.error==="not-allowed" ? "Microphone permission denied."
       : ev.error==="no-speech" ? "Didn't catch anything — try again."
       : ev.error==="network" ? "Dictation needs a network connection."
       : "Dictation error: "+ev.error; };
-  sr.onend = () => { dictating=false; $('btnDictate').innerHTML="&#127908; Dictate";
-    $('desc').value = baseText.trimEnd(); patch({description:$('desc').value});
-    if (!$('recMsg').classList.contains("bad")){ $('recMsg').className="msg ok";
-      $('recMsg').textContent = baseText.trim() ? "Dictation saved." : "Nothing captured."; } };
+  sr.onend = () => {
+    dictating = false; $('btnDictate').innerHTML = "&#127908; Dictate";
+    /* keep only finalised speech; drop any trailing interim guess */
+    $('desc').value = (baseText + finalText).replace(/\s+/g, " ").trim();
+    patch({description: $('desc').value});
+    if (!$('recMsg').classList.contains("bad")){
+      $('recMsg').className = "msg ok";
+      $('recMsg').textContent = finalText.trim() ? "Dictation saved." : "Nothing captured.";
+    }
+  };
   try { sr.start(); }
   catch(err){ $('recMsg').className="msg bad"; $('recMsg').textContent="Could not start: "+err.message; }
 };
