@@ -480,7 +480,10 @@ $('btnDictate').onclick = () => {
     $('recMsg').textContent="No browser dictation — use the mic key on your keyboard."; return; }
   if (dictating){ sr.stop(); return; }
   sr = new SR(); sr.lang="en-US"; sr.continuous=true; sr.interimResults=true;
-  baseText = $('desc').value.trimEnd(); if (baseText) baseText += " ";
+  /* keep the user's existing text exactly as typed, line breaks and all;
+     only add a separator when it does not already end in whitespace */
+  baseText = $('desc').value;
+  if (baseText && !/\s$/.test(baseText)) baseText += " ";
   finalText = "";
   sr.onstart = () => { dictating=true; $('btnDictate').textContent="■ Stop dictating";
     $('recMsg').className="msg warn"; $('recMsg').textContent="Listening — speak now."; };
@@ -494,7 +497,7 @@ $('btnDictate').onclick = () => {
       if (ev.results[i].isFinal) fin += t.trim() + " "; else interim += t;
     }
     finalText = fin;
-    $('desc').value = (baseText + fin + interim).replace(/\s+/g, " ").trimStart();
+    $('desc').value = baseText + (fin + interim).replace(/\s+/g, " ").trimStart();
   };
   sr.onerror = ev => { $('recMsg').className="msg bad";
     $('recMsg').textContent = ev.error==="not-allowed" ? "Microphone permission denied."
@@ -504,7 +507,7 @@ $('btnDictate').onclick = () => {
   sr.onend = () => {
     dictating = false; $('btnDictate').innerHTML = "&#127908; Dictate";
     /* keep only finalised speech; drop any trailing interim guess */
-    $('desc').value = (baseText + finalText).replace(/\s+/g, " ").trim();
+    $('desc').value = (baseText + finalText.replace(/\s+/g, " ").trimStart()).trimEnd();
     patch({description: $('desc').value});
     if (!$('recMsg').classList.contains("bad")){
       $('recMsg').className = "msg ok";
