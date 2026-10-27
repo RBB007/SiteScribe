@@ -133,6 +133,32 @@ def test_bundle_has_report_tagged_photos_and_pinned_plans(client):
     assert _pin_color(zf, f"{folder}/plans/Framing plans_page1.png", 0.25, 0.5) == (0x9B, 0x51, 0xE0)
 
 
+def test_every_floor_plan_gets_its_own_image_even_with_the_same_name(client):
+    uploads = [("Level 1.pdf", "Info", 0.2), ("Plans.pdf", "Minor", 0.4),
+               ("plans.pdf", "Critical", 0.6), ("Plans.pdf", "Safety", 0.8)]
+    for name, importance, x in uploads:
+        plan = client.post("/api/plan", data={"plan": (_plan_pdf(), name)},
+                           content_type="multipart/form-data").get_json()
+        item_id, photo_id = _item(client)
+        _details(client, item_id, photo_id, importance=importance,
+                 location={"plan_id": plan["plan_id"], "page": 1, "x": x, "y": 0.5})
+
+    _, zf = _export(client)
+
+    folder = "Elm St _ Level 2"
+    plan_images = sorted(n for n in zf.namelist() if "/plans/" in n)
+    assert plan_images == sorted(f"{folder}/plans/{n}" for n in [
+        "Level 1_page1.png", "Plans_page1.png", "plans (2)_page1.png", "Plans (3)_page1.png"])
+    assert len(set(n.lower() for n in zf.namelist())) == len(zf.namelist())
+    # each image carries its own floor's pin, not another plan's
+    expected = {"Plans_page1.png": (0.4, (0x27, 0xAE, 0x60)),
+                "plans (2)_page1.png": (0.6, (0xEB, 0x57, 0x57)),
+                "Plans (3)_page1.png": (0.8, (0x9B, 0x51, 0xE0))}
+    for name, (x, color) in expected.items():
+        assert _pin_color(zf, f"{folder}/plans/{name}", x, 0.5) == color
+        assert _pin_color(zf, f"{folder}/plans/{name}", 0.2, 0.5) == (255, 255, 255)
+
+
 def test_bundle_without_plans_or_photos_still_has_report(client):
     item_id, photo_id = _item(client)
     _details(client, item_id, photo_id, description="Note only")
