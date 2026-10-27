@@ -1043,38 +1043,80 @@ def _to_buffer(doc):
     return buf
 
 
+def _report_buffer(data, pid):
+    """The Word report as a buffer: in the template if there is one, else plain.
+    Raises ImportError when python-docx is missing."""
+    from docx import Document
+    from docx.shared import Inches, Pt
+
+    if has_template(data, pid):
+        path = template_path(pid)
+        try:
+            return _to_buffer(_styled_doc(data, pid, path, Document, Inches, Pt))
+        except Exception as exc:
+            # a template gone bad must never stand between the user and a
+            # report — say so on the log and fall back to the plain one
+            print(f"[sitescribe] template {path} unusable ({exc!r}); "
+                  "exporting plain report", file=sys.stderr)
+    return _to_buffer(_plain_doc(data, pid, Document, Inches, Pt))
+
+
 @app.route("/api/export/docx")
 @require_pin
 @require_project
 def api_export_docx():
-    try:
-        from docx import Document
-        from docx.shared import Inches, Pt
-    except ImportError:
-        return jsonify(error="python-docx not installed"), 501
-
     pid = current_pid()
     with _lock:
         data = load(pid)
-        buf = None
-        if has_template(data, pid):
-            path = template_path(pid)
-            try:
-                buf = _to_buffer(_styled_doc(data, pid, path, Document, Inches, Pt))
-            except Exception as exc:
-                # a template gone bad must never stand between the user and a
-                # report — say so on the log and fall back to the plain one
-                print(f"[sitescribe] template {path} unusable ({exc!r}); "
-                      "exporting plain report", file=sys.stderr)
-                buf = None
-        if buf is None:
-            buf = _to_buffer(_plain_doc(data, pid, Document, Inches, Pt))
+        try:
+            buf = _report_buffer(data, pid)
+        except ImportError:
+            return jsonify(error="python-docx not installed"), 501
 
     return send_file(
         buf,
         mimetype=DOCX_MIME,
         as_attachment=True,
         download_name="site_visit_report.docx",
+    )
+
+
+def _export_bundle():
+    try:
+        from webapp import export_bundle   # python run.py, from the repo root
+    except ImportError:
+        import export_bundle               # python server.py, from inside webapp/
+    return export_bundle
+
+
+@app.route("/api/export/bundle")
+@require_pin
+@require_project
+def api_export_bundle():
+    """A zip of one folder: the Word report, photos/ with each entry written
+    into the photo's EXIF, and plans/ with every pinned plan page."""
+    pid = current_pid()
+    with _lock:
+        data = load(pid)
+        try:
+            report = _report_buffer(data, pid).getvalue()
+        except ImportError:
+            return jsonify(error="python-docx not installed"), 501
+        entry = find_project(load_index(), pid) or {}
+    name = entry.get("name") or pid
+    try:
+        bundle = _export_bundle()
+    except ImportError as exc:
+        return jsonify(error=f"photo/plan export unavailable: {exc}"), 501
+
+    buf = bundle.build_zip(data, report, name=name,
+                           item_dir=lambda item_id: item_dir(item_id, pid),
+                           plans_dir=plans_dir(pid))
+    return send_file(
+        buf,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"{bundle.folder_name(name)}.zip",
     )
 
 

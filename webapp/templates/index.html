@@ -622,7 +622,8 @@ $('tplInput').onchange = async e => {
 
 $('btnExport').onclick = () => {
   if (!items.some(x=>x.include)) return say("No items are included in the report.","bad");
-  location.href = "/api/export/docx";
+  // one zip: the Word report, photos/ with each entry in its EXIF, plans/ with the pins
+  location.href = "/api/export/bundle";
 };
 
 load().catch(e => say(e.message, "bad"));
