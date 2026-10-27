@@ -1351,11 +1351,9 @@ def api_export_docx():
 
 
 def _export_bundle():
-    try:
-        from webapp import export_bundle   # python run.py, from the repo root
-    except ImportError:
-        import export_bundle               # python server.py, from inside webapp/
-    return export_bundle
+    """webapp/export_bundle.py, loaded from beside this file (see
+    _sibling_module)."""
+    return _sibling_module("export_bundle")
 
 
 @app.route("/api/export/bundle")
@@ -1390,7 +1388,8 @@ def _build_bundle(pid):
     name = entry.get("name") or pid
     try:
         bundle = _export_bundle()
-    except ImportError as exc:
+    except (ImportError, OSError) as exc:
+        print(f"[sitescribe] export bundle unavailable: {exc!r}", file=sys.stderr)
         raise ImportError(f"photo/plan export unavailable: {exc}") from None
     buf = bundle.build_zip(data, report.getvalue(), name=name,
                            item_dir=lambda item_id: item_dir(item_id, pid),
