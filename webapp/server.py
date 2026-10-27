@@ -140,6 +140,26 @@ def health():
 _lock = threading.Lock()
 
 
+# Stored timestamps stay UTC (unambiguous); anything a person reads is rendered
+# in the site's local zone. Override with SITESCRIBE_TZ if the team moves.
+LOCAL_TZ_NAME = os.environ.get("SITESCRIBE_TZ", "America/Los_Angeles")
+
+try:
+    from zoneinfo import ZoneInfo
+    LOCAL_TZ = ZoneInfo(LOCAL_TZ_NAME)
+except Exception as exc:  # no tzdata on the box: fall back rather than crash
+    print(f"[sitescribe] timezone {LOCAL_TZ_NAME} unavailable ({exc}); using UTC",
+          file=sys.stderr)
+    LOCAL_TZ = datetime.timezone.utc
+
+
+def _local(ts=None):
+    """A timezone-aware datetime in the site's local zone."""
+    dt = (datetime.datetime.now(datetime.timezone.utc) if ts is None
+          else datetime.datetime.fromtimestamp(ts, datetime.timezone.utc))
+    return dt.astimezone(LOCAL_TZ)
+
+
 def _now():
     return datetime.datetime.now(datetime.timezone.utc).replace(
         microsecond=0).isoformat().replace("+00:00", "Z")
@@ -409,9 +429,7 @@ def clean_name(raw, default=None):
 
 
 def auto_name(ts=None):
-    when = (datetime.datetime.now(datetime.timezone.utc) if ts is None
-            else datetime.datetime.fromtimestamp(ts, datetime.timezone.utc))
-    return "Site Visit " + when.strftime("%Y-%m-%d %H:%M")
+    return "Site Visit " + _local(ts).strftime("%Y-%m-%d %H:%M")
 
 
 def make_project(name, created=None, idx=None):
@@ -959,7 +977,7 @@ def _write_report(doc, data, pid, *, title, heading, body, caption, Inches):
     plan_names = {p["plan_id"]: p.get("name", p["plan_id"]) for p in data["plans"]}
 
     title("Site Visit Report")
-    body(datetime.date.today().strftime("%B %d, %Y"))
+    body(_local().strftime("%B %d, %Y at %-I:%M %p %Z"))
 
     for it in items:
         heading(f"{it['item_id']} — {it.get('importance', 'Info')}")
