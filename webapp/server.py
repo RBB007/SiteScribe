@@ -1246,12 +1246,23 @@ def api_export_docx():
     )
 
 
+_BUNDLE_MODULE = "sitescribe_export_bundle"
+
+
 def _export_bundle():
-    try:
-        from webapp import export_bundle   # python run.py, from the repo root
-    except ImportError:
-        import export_bundle               # python server.py, from inside webapp/
-    return export_bundle
+    """webapp/export_bundle.py, loaded from beside this file. Going by path
+    rather than by name works however the server was started: run.py,
+    `python server.py`, gunicorn, or a wsgi file that loads server.py by path
+    (where neither `webapp` nor webapp/ is on sys.path)."""
+    mod = sys.modules.get(_BUNDLE_MODULE)
+    if mod is None:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            _BUNDLE_MODULE, os.path.join(BASE, "export_bundle.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        sys.modules[_BUNDLE_MODULE] = mod
+    return mod
 
 
 @app.route("/api/export/bundle")
@@ -1271,7 +1282,8 @@ def api_export_bundle():
     name = entry.get("name") or pid
     try:
         bundle = _export_bundle()
-    except ImportError as exc:
+    except (ImportError, OSError) as exc:
+        print(f"[sitescribe] export bundle unavailable: {exc!r}", file=sys.stderr)
         return jsonify(error=f"photo/plan export unavailable: {exc}"), 501
 
     buf = bundle.build_zip(data, report, name=name,

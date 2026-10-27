@@ -114,6 +114,7 @@ def _pinned_plan_pages(data: dict, entries, plans_dir: str, tmp: Path):
     """(zip name, png path) for every plan page with at least one pin."""
     observations = [obs for obs, _ in entries]
     pinned = {obs.pin.sheet_id for obs in observations if obs.pin}
+    used_stems = set()
     for plan in data.get("plans", []):
         plan_id = plan.get("plan_id")
         if not any(sheet_id.startswith(f"{plan_id}:") for sheet_id in pinned):
@@ -127,13 +128,24 @@ def _pinned_plan_pages(data: dict, entries, plans_dir: str, tmp: Path):
         for sheet in sheets:
             sheet.id = _sheet_id(plan_id, sheet.page_index + 1)
         project = Project(name="export", plans=sheets, observations=observations)
-        stem = _safe(Path(plan.get("name") or plan["file"]).stem)
+        stem = _unique(_safe(Path(plan.get("name") or plan["file"]).stem), used_stems)
         for sheet in sheets:
             if sheet.id not in pinned:
                 continue
             arcname = f"{stem}_page{sheet.page_index + 1}.png"
             png = tmp / "marked" / str(plan_id) / arcname
             yield arcname, plan_markup.sheet_image_with_pins(project, sheet.id, png)
+
+
+def _unique(stem: str, used: set) -> str:
+    """Plans.pdf uploaded twice -> "Plans", then "Plans (2)", so no image in
+    the zip overwrites another when it is unzipped."""
+    name, n = stem, 1
+    while name.lower() in used:   # Windows and macOS file names ignore case
+        n += 1
+        name = f"{stem} ({n})"
+    used.add(name.lower())
+    return name
 
 
 def _sheet_id(plan_id, page) -> str:
