@@ -119,6 +119,9 @@ def test_tagged_template_is_rendered_with_docxtpl(tmp_path):
     tpl = Document()
     tpl.sections[0].header.paragraphs[0].text = "{{ project_address }} - {{ date_long }}"
     for line in ("Job {{ job_no }}: {{ project_name }}",
+                 "{%p for p in structural_elements_observed %}",
+                 "{{ p }}",
+                 "{%p endfor %}",
                  "{%p for item in items %}",
                  "ITEM {{ item.number }} [{{ item.severity }}] {{ item.description }}",
                  "{%p for ph in item.photos %}",
@@ -133,6 +136,7 @@ def test_tagged_template_is_rendered_with_docxtpl(tmp_path):
     text = _text(doc)
 
     assert "Job 260XX.00: 99 Green St Remodel" in text
+    assert "general conformance" not in text        # nothing the engineer did not write
     assert "ITEM 3.2 [Safety] Holdown rod in (E) 4X beam" in text
     assert "{{" not in text and "{%" not in text
     assert doc.sections[0].header.paragraphs[0].text == "99 Green St, San Francisco - October 27, 2026"
@@ -157,3 +161,22 @@ def test_same_input_gives_same_text(tmp_path):
     a = _text(Document(str(word_report.build_report(project, tmp_path / "a.docx"))))
     b = _text(Document(str(word_report.build_report(project, tmp_path / "b.docx"))))
     assert a == b
+
+
+def test_plan_sheet_pins_only_the_included_entries(tmp_path, monkeypatch):
+    from sitescribe import plan_markup
+
+    seen = []
+
+    def fake(project, sheet_id, out):
+        seen.append([o.description for o in project.observations])
+        Image.new("RGB", (100, 80), "white").save(out)
+        return out
+    monkeypatch.setattr(plan_markup, "sheet_image_with_pins", fake)
+
+    project = _project(tmp_path)
+    project.observations[3].pin = PlanPin(project.plans[0].id, 0.1, 0.1)   # excluded, pinned
+    doc = Document(str(word_report.build_report(project, tmp_path / "r.docx")))
+
+    assert seen == [["Discontinued studs at window", "Holdown rod in (E) 4X beam", "Sheathing nailing OK"]]
+    assert "Pin colors" not in _text(doc)       # plan_markup's sheet carries the legend

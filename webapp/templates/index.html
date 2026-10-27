@@ -726,11 +726,28 @@ $('tplInput').onchange = async ev => {
   }catch(err){ say(err.message,"bad"); }
 };
 
-$('btnExport').onclick = () => {
+$('btnExport').onclick = async () => {
   const any = items.some(it => it.photos.some(p => p.include));
   if (!any) return say("No incidents are included in the report.","bad");
-  // one zip: the Word report, photos/ with each entry in its EXIF, plans/ with the pins
-  location.href = "/api/export/bundle";
+  // Two steps so the page can show progress and a real error on a phone:
+  // build the zip (the Word report, photos/ with each entry in its EXIF,
+  // plans/ with the pins) and then download the finished file from disk.
+  const btn = $('btnExport');
+  if (btn.disabled) return;
+  // the status line sits above the fold on a phone, so the button says it too
+  btn.disabled = true; btn.textContent = "Building…";
+  say("Building the report… a big visit can take a minute.","warn");
+  try{
+    const r = await api('/api/export/build',{method:"POST"});
+    const mb = (r.bytes/1048576).toFixed(1);
+    location.href = r.url;
+    if (r.notice) say(`Report ready (${mb} MB), downloading — note: ${r.notice}.`,"warn");
+    else say(`Report ready (${mb} MB), downloading…`,"ok");
+  }catch(err){ say("Export failed: " + err.message,"bad"); }
+  finally{
+    btn.disabled = false; btn.textContent = "Export";
+    $('status').scrollIntoView({block:"nearest"});
+  }
 };
 
 load().catch(e => say(e.message,"bad"));

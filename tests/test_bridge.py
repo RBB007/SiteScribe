@@ -3,6 +3,7 @@ the Flask test client, export /api/export/docx, and check the report is the
 one sitescribe.word_report builds (ITEM lines, photos, pinned plan sheet)."""
 
 import io
+import zipfile
 from pathlib import Path
 
 import pymupdf
@@ -190,3 +191,34 @@ def test_docx_export_falls_back_when_the_module_fails(client, monkeypatch):
     text = _text(Document(io.BytesIO(r.data)))
     assert "Cracked beam at C-4" in text        # the built-in report still ships
     assert "ITEM 1.1" not in text
+    notice = r.headers["X-SiteScribe-Report-Notice"]
+    assert "built-in report layout used" in notice and "simulated module bug" in notice
+
+    # the two-step export the page uses says so too
+    r = client.post("/api/export/build")
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert "simulated module bug" in r.get_json()["notice"]
+
+
+def test_export_build_then_download(client):
+    _capture(client)
+
+    r = client.post("/api/export/build")
+
+    assert r.status_code == 200, r.get_data(as_text=True)
+    built = r.get_json()
+    assert built["url"] == "/api/export/download" and built["notice"] is None
+    assert built["name"] == "Elm St _ Level 2.zip" and built["bytes"] > 0
+
+    r = client.get(built["url"])
+    assert r.status_code == 200
+    assert r.headers["Content-Disposition"].endswith('filename="Elm St _ Level 2.zip"')
+    names = zipfile.ZipFile(io.BytesIO(r.data)).namelist()
+    assert "Elm St _ Level 2/site_visit_report.docx" in names
+    assert any(n.startswith("Elm St _ Level 2/plans/") for n in names)
+    assert "X-SiteScribe-Report-Notice" not in client.get("/api/export/docx").headers
+
+
+def test_export_download_before_build_is_404(client):
+    r = client.get("/api/export/download")
+    assert r.status_code == 404 and "no export" in r.get_json()["error"]

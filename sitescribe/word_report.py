@@ -36,6 +36,9 @@ Report options read from project.report_options (all optional):
     include_marked_plans  bool, default True   section 3
     include_photo_log     bool, default True   section 6
     job_no, site_visit_no str                  header (no Project field yet)
+    stage_of_construction, structural_elements_observed
+                          str                  tagged templates only; blank
+                                               unless the engineer wrote them
 
 Large phone photos are downscaled to 1600 px on the long side before they go
 into the document, so a 60-photo report stays a few MB.
@@ -48,7 +51,7 @@ import logging
 import re
 import tempfile
 import zipfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .models import SEVERITY_COLORS, Observation, PlanSheet, Project, Severity
@@ -198,8 +201,9 @@ def _open_image(path: Path):
             raise ImportError(
                 f"{path.name} is a HEIC photo: pip install pillow-heif") from exc
         pillow_heif.register_heif_opener()
-    im = Image.open(path)
-    return ImageOps.exif_transpose(im)
+    with Image.open(path) as im:
+        # a transposed (or plain) copy, so the file handle closes here
+        return ImageOps.exif_transpose(im)
 
 
 def _image_stream(path: Path, max_px: int) -> tuple[io.BytesIO, int, int]:
@@ -208,7 +212,7 @@ def _image_stream(path: Path, max_px: int) -> tuple[io.BytesIO, int, int]:
         im.thumbnail((max_px, max_px))
         buf = io.BytesIO()
         if im.mode in ("RGBA", "LA", "P") or path.suffix.lower() == ".png":
-            im.save(buf, "PNG", optimize=True)
+            im.save(buf, "PNG")
         else:
             im.convert("RGB").save(buf, "JPEG", quality=85)
         w, h = im.size
@@ -232,19 +236,30 @@ def _photo_size(w: int, h: int, n: int, max_w_in: float) -> dict:
 
 
 def _plan_image(project: Project, sheet: PlanSheet, entries: list[_Entry],
-                tmp: Path) -> Path | None:
-    """Sheet PNG with pins: plan_markup's if it is written, else our own."""
+                tmp: Path) -> tuple[Path | None, bool]:
+    """(sheet PNG with pins, whether it already carries a legend).
+
+    plan_markup draws the pins and a legend when it is written, else we draw
+    the pins ourselves. Either way only the entries in the report are pinned:
+    an observation with include=False is left off the sheet as well."""
     from . import plan_markup
 
-    out = tmp / f"plan_{sheet.id}.png"
+    out = tmp / f"plan_{_safe_name(sheet.id)}.png"
+    shown = replace(project, observations=[e.obs for e in entries])
     try:
-        return Path(plan_markup.sheet_image_with_pins(project, sheet.id, out))
+        return Path(plan_markup.sheet_image_with_pins(shown, sheet.id, out)), True
     except NotImplementedError:
         pass
     if not sheet.image_path or not Path(sheet.image_path).is_file():
         log.warning("Plan sheet %s has no rendered image; left out of report", sheet.name)
-        return None
-    return _draw_pins(sheet, entries, out)
+        return None, False
+    return _draw_pins(sheet, entries, out), False
+
+
+def _safe_name(text: str) -> str:
+    """A sheet id as a file name: "PL-01:2" -> "PL-01_2" (':' is not allowed
+    on Windows)."""
+    return re.sub(r"[^\w.-]", "_", str(text)) or "sheet"
 
 
 def _draw_pins(sheet: PlanSheet, entries: list[_Entry], out: Path) -> Path:
@@ -457,11 +472,16 @@ class _Writer:
         if not sheets:
             return
         self.heading("Plan Sheets")
-        self.legend()
+        legend_shown = False
         for sheet in sheets:
-            img = _plan_image(project, sheet, entries, tmp)
+            img, has_legend = _plan_image(project, sheet, entries, tmp)
             if img is None:
                 continue
+            if not has_legend and not legend_shown:
+                # plan_markup burns a legend into the sheet; ours only has to
+                # go in when we drew the pins
+                self.legend()
+                legend_shown = True
             cap = self.body(sheet.name)
             cap.runs[0].bold = True
             cap.paragraph_format.keep_with_next = True
@@ -733,7 +753,7 @@ def _template_context(tpl, project: Project, entries: list[_Entry], tmp: Path) -
         # SOR template: a group sits on one line right of a 1.5" indent (~4.4"
         # usable) with ~0.55" gaps between photos
         n = len(e.photos)
-        max_w = 4.3 if n <= 1 else (4.2 - 0.6 * (n - 1)) / n
+        max_w = 4.3 if n <= 1 else max(1.0, (4.2 - 0.6 * (n - 1)) / n)
         out = []
         for p in e.photos:
             stream, w, h = _image_stream(p, _PHOTO_MAX_PX)
@@ -767,13 +787,14 @@ def _template_context(tpl, project: Project, entries: list[_Entry], tmp: Path) -
     if opts.get("include_marked_plans", True):
         pinned = {e.obs.pin.sheet_id for e in entries if e.obs.pin is not None}
         for sheet in (s for s in project.plans if s.id in pinned):
-            img = _plan_image(project, sheet, entries, tmp)
+            img, _ = _plan_image(project, sheet, entries, tmp)
             if img is not None:
                 stream, _, _ = _image_stream(img, _PLAN_MAX_PX)
                 plans.append({"name": sheet.name, "image": InlineImage(tpl, stream, width=Inches(6.5))})
 
+    # Nothing is written into the record that the engineer did not enter:
+    # the stage and the conformance statement stay blank unless given.
     summary = _paragraphs(project.summary)
-    stage = opts.get("stage_of_construction")
     return {
         "date_short": f"{project.visit_date:%m/%d/%y}",
         "date_long": _long_date(project),
@@ -782,11 +803,8 @@ def _template_context(tpl, project: Project, entries: list[_Entry], tmp: Path) -
         "project_address": project.site_address,
         "observer": project.engineer,
         "site_visit_no": str(opts.get("site_visit_no", "") or ""),
-        "stage_of_construction": _paragraphs(stage) if stage else summary,
-        "structural_elements_observed": _paragraphs(
-            opts.get("structural_elements_observed")
-            or "The structural framing was observed to be in general conformance with the "
-               "structural drawings except for the following items:"),
+        "stage_of_construction": _paragraphs(opts.get("stage_of_construction") or ""),
+        "structural_elements_observed": _paragraphs(opts.get("structural_elements_observed") or ""),
         "summary": summary,
         "items": items,
         "previous_items": list(opts.get("previous_items") or []),

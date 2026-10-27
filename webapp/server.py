@@ -36,6 +36,7 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 from pathlib import Path
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -1103,20 +1104,18 @@ def _visit_date(entry):
     return when.astimezone(LOCAL_TZ) if when.tzinfo else when
 
 
-def _module_report(data, pid):
+def _module_report(data, pid, entry):
     """The report from sitescribe.word_report, with the visit converted by
-    bridge.to_project(). None when the module is not built yet
-    (NotImplementedError) or cannot run, so the built-in report below takes
-    over and the user still gets a file; the reason goes to stderr.
+    bridge.to_project(). (buffer, None) on success; (None, reason) when the
+    module is not built yet (NotImplementedError) or cannot run, so the
+    built-in report below takes over and the user still gets a file. The
+    reason is short enough to show the user; the traceback goes to stderr.
     Raises ImportError only when python-docx itself is missing."""
     try:
         bridge = _sibling_module("bridge")
         from sitescribe import word_report
     except (ImportError, OSError) as exc:
-        print(f"[sitescribe] word_report unavailable ({exc!r}); "
-              "exporting built-in report", file=sys.stderr)
-        return None
-    entry = find_project(load_index(), pid) or {}
+        return None, _fallback(f"the Word report module could not load ({exc})")
     with tempfile.TemporaryDirectory() as tmp:
         try:
             project = bridge.to_project(
@@ -1130,19 +1129,25 @@ def _module_report(data, pid):
                 tz=LOCAL_TZ,
             )
             out = word_report.build_report(project, Path(tmp) / "site_visit_report.docx")
-            return io.BytesIO(Path(out).read_bytes())
+            return io.BytesIO(Path(out).read_bytes()), None
         except NotImplementedError:
-            return None
+            return None, _fallback("the Word report module is not written yet", trace=False)
         except ImportError as exc:
             if "python-docx" in str(exc):
                 raise
-            print(f"[sitescribe] word_report needs a package ({exc}); "
-                  "exporting built-in report", file=sys.stderr)
-            return None
+            return None, _fallback(f"the Word report module needs a package ({exc})", trace=False)
         except Exception as exc:
-            print(f"[sitescribe] word_report failed ({exc!r}); "
-                  "exporting built-in report", file=sys.stderr)
-            return None
+            return None, _fallback(f"the Word report module failed ({type(exc).__name__}: {exc})")
+
+
+def _fallback(reason, *, trace=True):
+    """Log why the built-in report is shipping instead of the module's, with
+    the traceback when there is one, and return the reason for the user."""
+    reason = " ".join(str(reason).split())
+    print(f"[sitescribe] {reason}; exporting built-in report", file=sys.stderr)
+    if trace:
+        traceback.print_exc(file=sys.stderr)
+    return reason
 
 
 def styled(doc, text, *candidates):
@@ -1278,13 +1283,18 @@ def _to_buffer(doc):
     return buf
 
 
-def _report_buffer(data, pid):
-    """The Word report as a buffer: sitescribe.word_report's when it can run,
-    else the built-in one below, in the template if there is one, else plain.
+def _report_buffer(data, pid, entry=None):
+    """(buffer, notice): the Word report, sitescribe.word_report's when it can
+    run, else the built-in one below, in the template if there is one, else
+    plain. notice is None when the module's report shipped, otherwise one
+    line saying why the built-in one did, for the user to see.
     Raises ImportError when python-docx is missing."""
-    buf = _module_report(data, pid)
+    if entry is None:
+        entry = find_project(load_index(), pid) or {}
+    buf, notice = _module_report(data, pid, entry)
     if buf is not None:
-        return buf
+        return buf, None
+    notice = f"built-in report layout used because {notice}"
 
     from docx import Document
     from docx.shared import Inches, Pt
@@ -1292,13 +1302,31 @@ def _report_buffer(data, pid):
     if has_template(data, pid):
         path = template_path(pid)
         try:
-            return _to_buffer(_styled_doc(data, pid, path, Document, Inches, Pt))
+            return _to_buffer(_styled_doc(data, pid, path, Document, Inches, Pt)), notice
         except Exception as exc:
             # a template gone bad must never stand between the user and a
             # report — say so on the log and fall back to the plain one
             print(f"[sitescribe] template {path} unusable ({exc!r}); "
                   "exporting plain report", file=sys.stderr)
-    return _to_buffer(_plain_doc(data, pid, Document, Inches, Pt))
+            notice += f"; the template could not be used ({type(exc).__name__})"
+    return _to_buffer(_plain_doc(data, pid, Document, Inches, Pt)), notice
+
+
+def _notice_headers(notice):
+    """The fallback notice as a response header the page can show. Header
+    values are latin-1 and one line, so anything else becomes '?'."""
+    if not notice:
+        return {}
+    clean = "".join(ch if " " <= ch <= "~" else "?" for ch in notice)[:300]
+    return {"X-SiteScribe-Report-Notice": clean}
+
+
+def _export_snapshot(pid):
+    """The visit and its index entry, read under the lock. The report itself
+    is built outside it: rendering plans and photos takes seconds on a big
+    visit and must not stall every other request meanwhile."""
+    with _lock:
+        return load(pid), (find_project(load_index(), pid) or {})
 
 
 @app.route("/api/export/docx")
@@ -1306,19 +1334,20 @@ def _report_buffer(data, pid):
 @require_project
 def api_export_docx():
     pid = current_pid()
-    with _lock:
-        data = load(pid)
-        try:
-            buf = _report_buffer(data, pid)
-        except ImportError:
-            return jsonify(error="python-docx not installed"), 501
+    data, entry = _export_snapshot(pid)
+    try:
+        buf, notice = _report_buffer(data, pid, entry)
+    except ImportError:
+        return jsonify(error="python-docx not installed"), 501
 
-    return send_file(
+    resp = send_file(
         buf,
         mimetype=DOCX_MIME,
         as_attachment=True,
         download_name="site_visit_report.docx",
     )
+    resp.headers.update(_notice_headers(notice))
+    return resp
 
 
 def _export_bundle():
@@ -1336,28 +1365,86 @@ def api_export_bundle():
     """A zip of one folder: the Word report, photos/ with each entry written
     into the photo's EXIF, and plans/ with every pinned plan page."""
     pid = current_pid()
-    with _lock:
-        data = load(pid)
-        try:
-            report = _report_buffer(data, pid).getvalue()
-        except ImportError:
-            return jsonify(error="python-docx not installed"), 501
-        entry = find_project(load_index(), pid) or {}
+    try:
+        buf, name, notice = _build_bundle(pid)
+    except ImportError as exc:
+        return jsonify(error=str(exc)), 501
+    resp = send_file(
+        buf,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=name,
+    )
+    resp.headers.update(_notice_headers(notice))
+    return resp
+
+
+def _build_bundle(pid):
+    """(zip buffer, file name, fallback notice or None) for the project.
+    Raises ImportError with a message for the user when a package is missing."""
+    data, entry = _export_snapshot(pid)
+    try:
+        report, notice = _report_buffer(data, pid, entry)
+    except ImportError:
+        raise ImportError("python-docx not installed") from None
     name = entry.get("name") or pid
     try:
         bundle = _export_bundle()
     except ImportError as exc:
-        return jsonify(error=f"photo/plan export unavailable: {exc}"), 501
-
-    buf = bundle.build_zip(data, report, name=name,
+        raise ImportError(f"photo/plan export unavailable: {exc}") from None
+    buf = bundle.build_zip(data, report.getvalue(), name=name,
                            item_dir=lambda item_id: item_dir(item_id, pid),
                            plans_dir=plans_dir(pid))
-    return send_file(
-        buf,
-        mimetype="application/zip",
-        as_attachment=True,
-        download_name=f"{bundle.folder_name(name)}.zip",
-    )
+    return buf, f"{bundle.folder_name(name)}.zip", notice
+
+
+def export_file(pid=None):
+    pid = pid or current_pid()
+    return os.path.join(project_data_dir(pid), "export.zip")
+
+
+@app.route("/api/export/build", methods=["POST"])
+@require_pin
+@require_project
+def api_export_build():
+    """Build the bundle and keep it as the project's latest export, so the
+    page can show progress and errors (fetch) and then download a file from
+    disk by plain navigation, which works the same in every phone browser.
+    Returns where to download it and the fallback notice, if any."""
+    pid = current_pid()
+    started = time.time()
+    try:
+        buf, name, notice = _build_bundle(pid)
+    except ImportError as exc:
+        return jsonify(error=str(exc)), 501
+    path = export_file(pid)
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as fh:
+        fh.write(buf.getvalue())
+    os.replace(tmp, path)
+    with open(path + ".json", "w", encoding="utf-8") as fh:
+        json.dump({"name": name, "built": _now()}, fh)
+    return jsonify(url="/api/export/download", name=name, notice=notice,
+                   bytes=os.path.getsize(path), seconds=round(time.time() - started, 1))
+
+
+@app.route("/api/export/download")
+@require_pin
+@require_project
+def api_export_download():
+    """The latest bundle built by /api/export/build."""
+    pid = current_pid()
+    path = export_file(pid)
+    if not os.path.exists(path):
+        raise ApiError("no export built yet", 404)
+    name = "site_visit_report.zip"
+    try:
+        with open(path + ".json", encoding="utf-8") as fh:
+            name = json.load(fh).get("name") or name
+    except (OSError, ValueError):
+        pass
+    return send_file(path, mimetype="application/zip", as_attachment=True,
+                     download_name=name, conditional=False, max_age=0)
 
 
 # ---------------------------------------------------------------- errors
