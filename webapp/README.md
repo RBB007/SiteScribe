@@ -43,6 +43,26 @@ A legacy single-visit `data/visit.json` is migrated into `P-001` on first
 start — files moved, stored URLs re-prefixed, original mtime preserved. It is
 idempotent.
 
+## Report template (formatting only)
+
+Upload your firm's Word template with the **Template** button and the export
+inherits its styles, fonts, margins, header/footer and logo. **No AI involved** —
+python-docx opens the template as the base document and writes content using its
+named styles (`Title`, `Heading 1`, `Body Text`, `Caption`), falling back to
+`Normal` for any the template lacks.
+
+You can upload a filled-in past report, not just a blank template: the body
+content is stripped while styles, section setup and the letterhead are kept.
+
+A missing or corrupt template never blocks a report — it logs and falls back to
+the plain format.
+
+| Route | Does |
+|---|---|
+| `GET /api/template` | the record, or null |
+| `POST /api/template` | multipart `template` (.docx only) |
+| `DELETE /api/template` | revert to plain formatting |
+
 ## Data model
 
 ```

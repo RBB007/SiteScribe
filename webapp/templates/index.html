@@ -34,6 +34,13 @@ button.ghost{background:var(--card2);color:var(--fg);border:1px solid var(--line
 button.ghost:disabled{opacity:.35}
 button.danger{background:transparent;color:var(--bad);border:1px solid var(--line)}
 button.wide{width:100%}
+button.sm{padding:9px 11px;font-size:13px}
+.tplBar{display:flex;align-items:center;gap:9px;background:var(--card);
+  border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin-top:10px;
+  font-size:12.5px;color:var(--mut)}
+.tplBar b{color:var(--fg);font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tplBar .x{margin-left:auto;background:transparent;border:0;color:var(--bad);
+  font-size:17px;padding:3px 7px;cursor:pointer;flex:0 0 auto}
 .nav{display:flex;align-items:center;gap:10px;margin:14px 0 0}
 .nav button{min-width:56px;font-size:20px;line-height:1;padding:12px 0;flex:0 0 auto}
 .nav .label{flex:1;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
@@ -122,7 +129,10 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
     <div class="projName" id="projName">&nbsp;</div>
     <div class="sub" id="visitSub">Loading…</div>
   </div>
-  <button class="ghost" id="btnPlans">Plans</button>
+  <div style="display:flex;gap:7px;flex:0 0 auto">
+    <button class="ghost sm" id="btnPlans">Plans</button>
+    <button class="ghost sm" id="btnTemplate">Template</button>
+  </div>
 </header>
 
 <!-- ITEM NAVIGATOR (bold triangles in the sketch) -->
@@ -147,6 +157,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 </div>
 <input type="file" accept="image/*" id="photoInput">
 <input type="file" accept="application/pdf,image/*" id="planInput">
+<input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" id="tplInput">
 
 <!-- INCLUDE -->
 <div class="inc">
@@ -187,6 +198,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   <input type="text" id="tags" placeholder="comma, separated, tags">
 </div>
 
+<div id="tplBar"></div>
 <div class="msg" id="status"></div>
 </div>
 
@@ -249,6 +261,7 @@ async function load(){
     $('projName').textContent = p ? p.name : "SiteScribe";
     document.title = p ? `${p.name} — SiteScribe` : "SiteScribe";
   }).catch(()=>{});
+  loadTemplate();
   const d = await api('/api/visit');
   items = d.items; plans = d.plans;
   if (ii >= items.length) ii = Math.max(0, items.length - 1);
@@ -565,6 +578,47 @@ $('planCanvas').onclick = e => {
 $('planClear').onclick = () => { pendingLoc = null; $('planPin').hidden = true;
   $('planMsg').textContent = "Marker cleared."; };
 $('planDone').onclick = async () => { $('planDlg').close(); await patch({location: pendingLoc}); };
+
+/* ---------------- report template (formatting only) ---------------- */
+let template = null;
+
+async function loadTemplate(){
+  try{ const r = await api('/api/template'); template = r.template || null; }
+  catch(e){ template = null; }
+  renderTemplate();
+}
+
+function renderTemplate(){
+  if (!template){
+    $('tplBar').innerHTML = "";
+    return;
+  }
+  const n = (template.styles || []).length;
+  $('tplBar').innerHTML =
+    `<span>&#128196;</span><b>${esc(template.name)}</b>
+     <span>&middot; ${n} style${n===1?"":"s"} &middot; report will match it</span>
+     <button class="x" id="tplDel" title="Remove template">&times;</button>`;
+  $('tplDel').onclick = async () => {
+    if (!confirm("Remove the report template?\nExports go back to the plain format.")) return;
+    await api('/api/template', {method:"DELETE"});
+    template = null; renderTemplate(); say("Template removed.","ok");
+  };
+}
+const esc = s => String(s).replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+$('btnTemplate').onclick = () => $('tplInput').click();
+$('tplInput').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  e.target.value = "";
+  const fd = new FormData(); fd.append("template", f);
+  say("Uploading template…","warn");
+  try{
+    const r = await api('/api/template', {method:"POST", body:fd});
+    template = r.template || r; renderTemplate();
+    say(`Template set — the report will use “${template.name}” formatting.`,"ok");
+  }catch(err){ say(err.message,"bad"); }
+};
 
 $('btnExport').onclick = () => {
   if (!items.some(x=>x.include)) return say("No items are included in the report.","bad");

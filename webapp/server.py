@@ -6,6 +6,7 @@ Single-file Flask backend. Projects hold a visit; a visit holds items
 Storage:
     data/projects.json            index of every project
     data/<pid>/visit.json         that project's items + plans
+    data/<pid>/template.docx      that project's Word report template, if any
     uploads/<pid>/<item_id>/...   that project's photos + audio
     uploads/<pid>/plans/...       that project's plan files
 
@@ -196,7 +197,7 @@ def item_dir(item_id, pid=None):
 
 
 def _blank():
-    return {"items": [], "plans": []}
+    return {"items": [], "plans": [], "template": None}
 
 
 def load(pid=None):
@@ -213,6 +214,7 @@ def load(pid=None):
         return _blank()
     data.setdefault("items", [])
     data.setdefault("plans", [])
+    data.setdefault("template", None)
     # backfill fields added after some records were written, so an older
     # visit.json never 500s or silently drops data
     for it in data["items"]:
@@ -823,7 +825,223 @@ def api_plan():
         return jsonify(plan)
 
 
+# ---------------------------------------------------------------- template
+
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def template_path(pid=None):
+    pid = pid or current_pid()
+    return os.path.join(project_data_dir(pid), "template.docx")
+
+
+def has_template(data, pid):
+    """A template counts only when both the record and the file are there."""
+    return bool(data.get("template")) and os.path.exists(template_path(pid))
+
+
+def _template_json(rec):
+    """Flat record for convenience plus `template` so a client can test None."""
+    return jsonify(template=rec, **(rec or {}))
+
+
+@app.route("/api/template")
+@require_pin
+@require_project
+def api_template_get():
+    with _lock:
+        data = load()
+        return _template_json(data.get("template"))
+
+
+@app.route("/api/template", methods=["POST"])
+@require_pin
+@require_project
+def api_template_upload():
+    try:
+        from docx import Document
+        from docx.enum.style import WD_STYLE_TYPE
+    except ImportError:
+        return jsonify(error="python-docx not installed"), 501
+
+    f = request.files.get("template")
+    if not f or not f.filename:
+        raise ApiError("no template uploaded")
+    name = os.path.basename(f.filename)
+    low = name.lower()
+    if low.endswith(".doc"):
+        raise ApiError("legacy .doc files are not supported — open it in Word "
+                       "and use Save As to make a .docx, then upload that")
+    if not low.endswith(".docx"):
+        raise ApiError("template must be a Word .docx file")
+
+    pid = current_pid()
+    with _lock:
+        path = template_path(pid)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        # land it beside the real name first: a file that will not open must
+        # not replace a template that already works
+        tmp = path + ".tmp"
+        f.save(tmp)
+        try:
+            doc = Document(tmp)
+            styles = [s.name for s in doc.styles if s.type == WD_STYLE_TYPE.PARAGRAPH]
+        except Exception as exc:
+            print(f"[sitescribe] rejected template {name!r}: {exc!r}", file=sys.stderr)
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            raise ApiError("not a readable .docx file")
+        os.replace(tmp, path)
+        data = load(pid)
+        rec = {"name": name, "uploaded": _now(), "styles": styles}
+        data["template"] = rec
+        save(data, pid)
+        return _template_json(rec)
+
+
+@app.route("/api/template", methods=["DELETE"])
+@require_pin
+@require_project
+def api_template_delete():
+    pid = current_pid()
+    with _lock:
+        try:
+            os.remove(template_path(pid))
+        except OSError:
+            pass  # record removal is what matters; a missing file is not an error
+        data = load(pid)
+        data["template"] = None
+        save(data, pid)
+        return jsonify(ok=True)
+
+
 # ---------------------------------------------------------------- export
+
+def styled(doc, text, *candidates):
+    """Add a paragraph using the first style the document actually has.
+
+    Uploaded templates differ wildly in which named styles they define, so a
+    missing one steps to the next candidate and finally to Normal. The style is
+    applied after the paragraph exists — add_paragraph(style=...) inserts the
+    text before it validates the name, which on failure would strand a
+    duplicate. ValueError covers a template where the name exists but belongs
+    to a character or table style.
+    """
+    p = doc.add_paragraph(text)
+    for name in candidates:
+        try:
+            p.style = name
+            break
+        except (KeyError, ValueError):
+            continue
+    return p
+
+
+def _strip_body(doc):
+    """Empty the template's body but keep its trailing <w:sectPr>.
+
+    sectPr holds page size, margins and the header/footer references, so
+    dropping it would lose the letterhead. Everything before it is the
+    template's own prose — a user may well upload a filled-in past report
+    rather than a blank shell, and that content must not reach the output.
+    """
+    body = doc.element.body
+    for child in list(body):
+        if not child.tag.endswith("}sectPr"):
+            body.remove(child)
+
+
+def _write_report(doc, data, pid, *, title, heading, body, caption, Inches):
+    """The report itself: same content and ordering for either export path."""
+    items = [it for it in sorted_items(data) if it.get("include", True)]
+    plan_names = {p["plan_id"]: p.get("name", p["plan_id"]) for p in data["plans"]}
+
+    title("Site Visit Report")
+    body(datetime.date.today().strftime("%B %d, %Y"))
+
+    for it in items:
+        heading(f"{it['item_id']} — {it.get('importance', 'Info')}")
+        if (it.get("description") or "").strip():
+            body(it["description"])
+        tags = it.get("tags") or []
+        if tags:
+            body("Tags: " + ", ".join(tags))
+        loc = it.get("location")
+        if loc:
+            name = plan_names.get(loc.get("plan_id"), loc.get("plan_id") or "unknown")
+            body(f"Plan {name}, page {loc.get('page', 1)} "
+                 f"(x={float(loc.get('x', 0)):.2f}, y={float(loc.get('y', 0)):.2f})")
+        for ph in it.get("photos", []):
+            path = os.path.join(item_dir(it["item_id"], pid), ph["filename"])
+            if not os.path.exists(path):
+                continue
+            try:
+                doc.add_picture(path, width=Inches(4.5))
+            except Exception as exc:
+                print(f"[sitescribe] could not embed {path}: {exc!r}", file=sys.stderr)
+                continue
+            if (ph.get("caption") or "").strip():
+                caption(ph["caption"])
+
+
+def _italic_caption(doc, text, Pt):
+    cap = doc.add_paragraph()
+    run = cap.add_run(text)
+    run.italic = True
+    run.font.size = Pt(9)
+    return cap
+
+
+def _styled_caption(doc, text, Pt):
+    """Caption style when the template has one, hand-italicised otherwise."""
+    cap = doc.add_paragraph(text)
+    try:
+        cap.style = "Caption"
+    except (KeyError, ValueError):
+        for run in cap.runs:
+            run.italic = True
+            run.font.size = Pt(9)
+    return cap
+
+
+def _plain_doc(data, pid, Document, Inches, Pt):
+    """The original report, built on python-docx's own default template."""
+    doc = Document()
+    _write_report(
+        doc, data, pid,
+        title=lambda t: doc.add_heading(t, level=0),
+        heading=lambda t: doc.add_heading(t, level=1),
+        body=doc.add_paragraph,
+        caption=lambda t: _italic_caption(doc, t, Pt),
+        Inches=Inches,
+    )
+    return doc
+
+
+def _styled_doc(data, pid, path, Document, Inches, Pt):
+    """The same report written into the firm's template: styles, margins,
+    headers and footers all come along because the template *is* the base."""
+    doc = Document(path)
+    _strip_body(doc)
+    _write_report(
+        doc, data, pid,
+        title=lambda t: styled(doc, t, "Title", "Heading 1"),
+        heading=lambda t: styled(doc, t, "Heading 1", "Heading 2"),
+        body=lambda t: styled(doc, t, "Body Text", "Normal"),
+        caption=lambda t: _styled_caption(doc, t, Pt),
+        Inches=Inches,
+    )
+    return doc
+
+
+def _to_buffer(doc):
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf
+
 
 @app.route("/api/export/docx")
 @require_pin
@@ -835,50 +1053,26 @@ def api_export_docx():
     except ImportError:
         return jsonify(error="python-docx not installed"), 501
 
+    pid = current_pid()
     with _lock:
-        data = load()
-        items = [it for it in sorted_items(data) if it.get("include", True)]
-        plan_names = {p["plan_id"]: p.get("name", p["plan_id"]) for p in data["plans"]}
-
-        doc = Document()
-        doc.add_heading("Site Visit Report", level=0)
-        doc.add_paragraph(datetime.date.today().strftime("%B %d, %Y"))
-
-        for it in items:
-            doc.add_heading(f"{it['item_id']} — {it.get('importance', 'Info')}", level=1)
-            if (it.get("description") or "").strip():
-                doc.add_paragraph(it["description"])
-            tags = it.get("tags") or []
-            if tags:
-                doc.add_paragraph("Tags: " + ", ".join(tags))
-            loc = it.get("location")
-            if loc:
-                name = plan_names.get(loc.get("plan_id"), loc.get("plan_id") or "unknown")
-                doc.add_paragraph(
-                    f"Plan {name}, page {loc.get('page', 1)} "
-                    f"(x={float(loc.get('x', 0)):.2f}, y={float(loc.get('y', 0)):.2f})")
-            for ph in it.get("photos", []):
-                path = os.path.join(item_dir(it["item_id"]), ph["filename"])
-                if not os.path.exists(path):
-                    continue
-                try:
-                    doc.add_picture(path, width=Inches(4.5))
-                except Exception as exc:
-                    print(f"[sitescribe] could not embed {path}: {exc!r}", file=sys.stderr)
-                    continue
-                if (ph.get("caption") or "").strip():
-                    cap = doc.add_paragraph()
-                    run = cap.add_run(ph["caption"])
-                    run.italic = True
-                    run.font.size = Pt(9)
-
-        buf = io.BytesIO()
-        doc.save(buf)
-        buf.seek(0)
+        data = load(pid)
+        buf = None
+        if has_template(data, pid):
+            path = template_path(pid)
+            try:
+                buf = _to_buffer(_styled_doc(data, pid, path, Document, Inches, Pt))
+            except Exception as exc:
+                # a template gone bad must never stand between the user and a
+                # report — say so on the log and fall back to the plain one
+                print(f"[sitescribe] template {path} unusable ({exc!r}); "
+                      "exporting plain report", file=sys.stderr)
+                buf = None
+        if buf is None:
+            buf = _to_buffer(_plain_doc(data, pid, Document, Inches, Pt))
 
     return send_file(
         buf,
-        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        mimetype=DOCX_MIME,
         as_attachment=True,
         download_name="site_visit_report.docx",
     )
