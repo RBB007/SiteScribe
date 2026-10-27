@@ -704,9 +704,12 @@ async function loadTemplate(){
 }
 function renderTemplate(){
   if (!template){ $('tplBar').innerHTML = ""; return; }
-  const n = (template.styles||[]).length;
+  const how = {report: "kept as the form: header, sections and closing stay, items are refilled",
+               tagged: "its {{ }} tags are filled in",
+               styles: "its page setup, header and styles are used"}[template.layout]
+            || "report will match it";
   $('tplBar').innerHTML = `<span>&#128196;</span><b>${esc(template.name)}</b>
-    <span>&middot; ${n} style${n===1?"":"s"} &middot; report will match it</span>
+    <span>&middot; ${how}</span>
     <button class="x" id="tplDel" title="Remove template">&times;</button>`;
   $('tplDel').onclick = async () => {
     if (!confirm("Remove the report template?\nExports go back to the plain format.")) return;
@@ -722,7 +725,9 @@ $('tplInput').onchange = async ev => {
   try{
     const r = await api('/api/template',{method:"POST", body:fd});
     template = r.template || r; renderTemplate();
-    say(`Template set — the report will use “${template.name}” formatting.`,"ok");
+    say(template.layout === "report"
+        ? `Template set — “${template.name}” is kept as the form; the date, project and items are filled in.`
+        : `Template set — the report will use “${template.name}” formatting.`,"ok");
   }catch(err){ say(err.message,"bad"); }
 };
 

@@ -69,19 +69,47 @@ page then navigates to `GET /api/export/download`, which serves that file.
 The report is built outside the global lock, so a long export does not stall
 other requests.
 
-## Report template (formatting only)
+Keeping the export small enough to build and download on site:
 
-Upload your firm's Word template with the **Template** button and the export
-inherits its styles, fonts, margins, header/footer and logo. **No AI involved** —
-python-docx opens the template as the base document and writes content using its
-named styles (`Title`, `Heading 1`, `Body Text`, `Caption`), falling back to
-`Normal` for any the template lacks.
+- The visit is converted and its plan pages rendered **once** per export
+  (`webapp/export_bundle.py` takes the same `Project` the report was built
+  from) and the zip is written straight to disk, not held in memory.
+- Photos in the zip are downscaled to 2560 px on the long side (JPEG q88,
+  HEIC converted to JPEG) with the entry written into their EXIF; a
+  3-12 MB phone original becomes well under 1 MB. The originals stay in
+  `uploads/`. Photos in the Word file are 1600 px, plan sheets 2400 px as
+  256-colour PNGs.
+- Under gunicorn use the repo's `gunicorn.conf.py` (`timeout = 300`): the
+  default 30 s kills the worker mid-build on a big visit and the phone sees
+  "Export failed: Bad Gateway".
 
-You can upload a filled-in past report, not just a blank template: the body
-content is stripped while styles, section setup and the letterhead are kept.
+## Report template
+
+Upload your firm's Word template with the **Template** button. **No AI is
+involved anywhere in the export**: every word in the report is either typed or
+dictated in the app, or comes from the template file itself. The upload reply
+(and the template bar) says which of three ways `sitescribe/word_report.py`
+will use the file (`layout`):
+
+- **`report`** — a past report, e.g. a GFDS *Structural Observation Record*
+  (anything with `ITEM n` paragraphs or a "Specific Items Observed" heading).
+  The document is kept as the form it is: title, header table, section labels
+  and the firm's closing paragraphs stay. The date, project name and the
+  other header fields are filled from the app and left **blank** when the app
+  has no value (never the old report's job number or observer); the old
+  report's items, photos, prose and "Previous Action Items" are removed; this
+  visit's `ITEM` blocks are cloned from the template's own paragraphs (same
+  font, indent and tab stops), followed by the pinned plan sheets. Dates in
+  the running header become the visit date and the header's project line
+  becomes the project name.
+- **`tagged`** — a template with `{{ }}` / `{%p %}` tags, rendered with
+  docxtpl; the template decides the layout.
+- **`styles`** — any other `.docx` (a letterhead, a blank shell): the body is
+  replaced by the app's own layout using the template's page setup, header,
+  footer and styles.
 
 A missing or corrupt template never blocks a report — it logs and falls back to
-the plain format.
+the plain format, and the response carries a notice saying so.
 
 | Route | Does |
 |---|---|

@@ -999,6 +999,18 @@ def has_template(data, pid):
     return bool(data.get("template")) and os.path.exists(template_path(pid))
 
 
+def _template_layout(path):
+    """How word_report will use the template: "report" (a firm report kept
+    as the form, items refilled), "tagged" (Jinja tags) or "styles" (page
+    setup and styles only). None when the module cannot say."""
+    try:
+        from sitescribe import word_report
+        return word_report.template_kind(Path(path))
+    except Exception as exc:
+        print(f"[sitescribe] could not classify template {path}: {exc!r}", file=sys.stderr)
+        return None
+
+
 def _template_json(rec):
     """Flat record for convenience plus `template` so a client can test None."""
     return jsonify(template=rec, **(rec or {}))
@@ -1054,7 +1066,8 @@ def api_template_upload():
             raise ApiError("not a readable .docx file")
         os.replace(tmp, path)
         data = load(pid)
-        rec = {"name": name, "uploaded": _now(), "styles": styles}
+        rec = {"name": name, "uploaded": _now(), "styles": styles,
+               "layout": _template_layout(path)}
         data["template"] = rec
         save(data, pid)
         return _template_json(rec)
@@ -1104,40 +1117,51 @@ def _visit_date(entry):
     return when.astimezone(LOCAL_TZ) if when.tzinfo else when
 
 
-def _module_report(data, pid, entry):
-    """The report from sitescribe.word_report, with the visit converted by
-    bridge.to_project(). (buffer, None) on success; (None, reason) when the
-    module is not built yet (NotImplementedError) or cannot run, so the
-    built-in report below takes over and the user still gets a file. The
-    reason is short enough to show the user; the traceback goes to stderr.
-    Raises ImportError only when python-docx itself is missing."""
+def _build_project(data, pid, entry, work_dir):
+    """The visit as a models.Project via bridge.to_project(), plan pages
+    rendered into work_dir (which must outlive every use of the Project).
+    (project, None), or (None, reason) when the adapter cannot run."""
     try:
         bridge = _sibling_module("bridge")
-        from sitescribe import word_report
     except (ImportError, OSError) as exc:
+        return None, _fallback(f"the visit adapter could not load ({exc})")
+    try:
+        return bridge.to_project(
+            data,
+            name=entry.get("name") or pid,
+            item_dir=lambda item_id: item_dir(item_id, pid),
+            plans_dir=plans_dir(pid),
+            work_dir=Path(work_dir) / "plans",
+            template=template_path(pid) if has_template(data, pid) else None,
+            visit_date=_visit_date(entry),
+            tz=LOCAL_TZ,
+        ), None
+    except Exception as exc:
+        return None, _fallback(f"the visit could not be converted ({type(exc).__name__}: {exc})")
+
+
+def _module_report(project, work_dir):
+    """The report from sitescribe.word_report. (buffer, None) on success;
+    (None, reason) when the module is not built yet (NotImplementedError) or
+    cannot run, so the built-in report below takes over and the user still
+    gets a file. The reason is short enough to show the user; the traceback
+    goes to stderr. Raises ImportError only when python-docx itself is
+    missing."""
+    try:
+        from sitescribe import word_report
+    except ImportError as exc:
         return None, _fallback(f"the Word report module could not load ({exc})")
-    with tempfile.TemporaryDirectory() as tmp:
-        try:
-            project = bridge.to_project(
-                data,
-                name=entry.get("name") or pid,
-                item_dir=lambda item_id: item_dir(item_id, pid),
-                plans_dir=plans_dir(pid),
-                work_dir=Path(tmp) / "plans",
-                template=template_path(pid) if has_template(data, pid) else None,
-                visit_date=_visit_date(entry),
-                tz=LOCAL_TZ,
-            )
-            out = word_report.build_report(project, Path(tmp) / "site_visit_report.docx")
-            return io.BytesIO(Path(out).read_bytes()), None
-        except NotImplementedError:
-            return None, _fallback("the Word report module is not written yet", trace=False)
-        except ImportError as exc:
-            if "python-docx" in str(exc):
-                raise
-            return None, _fallback(f"the Word report module needs a package ({exc})", trace=False)
-        except Exception as exc:
-            return None, _fallback(f"the Word report module failed ({type(exc).__name__}: {exc})")
+    try:
+        out = word_report.build_report(project, Path(work_dir) / "site_visit_report.docx")
+        return io.BytesIO(Path(out).read_bytes()), None
+    except NotImplementedError:
+        return None, _fallback("the Word report module is not written yet", trace=False)
+    except ImportError as exc:
+        if "python-docx" in str(exc):
+            raise
+        return None, _fallback(f"the Word report module needs a package ({exc})", trace=False)
+    except Exception as exc:
+        return None, _fallback(f"the Word report module failed ({type(exc).__name__}: {exc})")
 
 
 def _fallback(reason, *, trace=True):
@@ -1283,17 +1307,22 @@ def _to_buffer(doc):
     return buf
 
 
-def _report_buffer(data, pid, entry=None):
-    """(buffer, notice): the Word report, sitescribe.word_report's when it can
-    run, else the built-in one below, in the template if there is one, else
-    plain. notice is None when the module's report shipped, otherwise one
-    line saying why the built-in one did, for the user to see.
+def _report_and_project(data, pid, entry, work_dir):
+    """(buffer, notice, project): the Word report, sitescribe.word_report's
+    when it can run, else the built-in one below, in the template if there is
+    one, else plain. notice is None when the module's report shipped,
+    otherwise one line saying why the built-in one did, for the user to see.
+    project is the Project the report was built from (None when the visit
+    could not be converted), for the bundle to reuse: the plan pages it
+    carries are rendered into work_dir and live as long as it does.
     Raises ImportError when python-docx is missing."""
     if entry is None:
         entry = find_project(load_index(), pid) or {}
-    buf, notice = _module_report(data, pid, entry)
-    if buf is not None:
-        return buf, None
+    project, notice = _build_project(data, pid, entry, work_dir)
+    if project is not None:
+        buf, notice = _module_report(project, work_dir)
+        if buf is not None:
+            return buf, None, project
     notice = f"built-in report layout used because {notice}"
 
     from docx import Document
@@ -1302,14 +1331,21 @@ def _report_buffer(data, pid, entry=None):
     if has_template(data, pid):
         path = template_path(pid)
         try:
-            return _to_buffer(_styled_doc(data, pid, path, Document, Inches, Pt)), notice
+            return _to_buffer(_styled_doc(data, pid, path, Document, Inches, Pt)), notice, project
         except Exception as exc:
             # a template gone bad must never stand between the user and a
             # report — say so on the log and fall back to the plain one
             print(f"[sitescribe] template {path} unusable ({exc!r}); "
                   "exporting plain report", file=sys.stderr)
             notice += f"; the template could not be used ({type(exc).__name__})"
-    return _to_buffer(_plain_doc(data, pid, Document, Inches, Pt)), notice
+    return _to_buffer(_plain_doc(data, pid, Document, Inches, Pt)), notice, project
+
+
+def _report_buffer(data, pid, entry=None):
+    """(buffer, notice) for the report-only download."""
+    with tempfile.TemporaryDirectory() as tmp:
+        buf, notice, _ = _report_and_project(data, pid, entry, tmp)
+    return buf, notice
 
 
 def _notice_headers(notice):
@@ -1364,7 +1400,9 @@ def api_export_bundle():
     into the photo's EXIF, and plans/ with every pinned plan page."""
     pid = current_pid()
     try:
-        buf, name, notice = _build_bundle(pid)
+        with tempfile.TemporaryDirectory() as tmp:
+            name, notice = _write_bundle(pid, os.path.join(tmp, "bundle.zip"))
+            buf = io.BytesIO(Path(tmp, "bundle.zip").read_bytes())
     except ImportError as exc:
         return jsonify(error=str(exc)), 501
     resp = send_file(
@@ -1377,24 +1415,26 @@ def api_export_bundle():
     return resp
 
 
-def _build_bundle(pid):
-    """(zip buffer, file name, fallback notice or None) for the project.
+def _write_bundle(pid, out_path):
+    """Write the project's bundle zip to out_path; (file name, fallback
+    notice or None). The visit is converted and its plan pages rendered once,
+    for the report and the bundle both, and the zip goes straight to disk.
     Raises ImportError with a message for the user when a package is missing."""
     data, entry = _export_snapshot(pid)
-    try:
-        report, notice = _report_buffer(data, pid, entry)
-    except ImportError:
-        raise ImportError("python-docx not installed") from None
     name = entry.get("name") or pid
     try:
         bundle = _export_bundle()
     except (ImportError, OSError) as exc:
         print(f"[sitescribe] export bundle unavailable: {exc!r}", file=sys.stderr)
         raise ImportError(f"photo/plan export unavailable: {exc}") from None
-    buf = bundle.build_zip(data, report.getvalue(), name=name,
-                           item_dir=lambda item_id: item_dir(item_id, pid),
-                           plans_dir=plans_dir(pid))
-    return buf, f"{bundle.folder_name(name)}.zip", notice
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            report, notice, project = _report_and_project(data, pid, entry, tmp)
+        except ImportError:
+            raise ImportError("python-docx not installed") from None
+        bundle.write_zip(project, report.getvalue(), name=name,
+                         out_path=Path(out_path), work_dir=Path(tmp) / "bundle")
+    return f"{bundle.folder_name(name)}.zip", notice
 
 
 def export_file(pid=None):
@@ -1412,14 +1452,13 @@ def api_export_build():
     Returns where to download it and the fallback notice, if any."""
     pid = current_pid()
     started = time.time()
-    try:
-        buf, name, notice = _build_bundle(pid)
-    except ImportError as exc:
-        return jsonify(error=str(exc)), 501
     path = export_file(pid)
     tmp = path + ".tmp"
-    with open(tmp, "wb") as fh:
-        fh.write(buf.getvalue())
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    try:
+        name, notice = _write_bundle(pid, tmp)
+    except ImportError as exc:
+        return jsonify(error=str(exc)), 501
     os.replace(tmp, path)
     with open(path + ".json", "w", encoding="utf-8") as fh:
         json.dump({"name": name, "built": _now()}, fh)

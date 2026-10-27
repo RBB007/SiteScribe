@@ -202,3 +202,78 @@ def test_docx_export_unchanged(client):
 
     assert r.status_code == 200
     assert r.data[:2] == b"PK"
+
+
+# --------------------------------------------------------------- size
+
+def _big_jpeg(size=(4000, 3000)):
+    buf = io.BytesIO()
+    Image.new("RGB", size, "teal").save(buf, "JPEG", quality=95)
+    buf.seek(0)
+    return buf
+
+
+def _heic(size=(1600, 1200)):
+    pillow_heif = pytest.importorskip("pillow_heif")
+    pillow_heif.register_heif_opener()
+    buf = io.BytesIO()
+    Image.new("RGB", size, "maroon").save(buf, "HEIF")
+    buf.seek(0)
+    return buf
+
+
+def test_bundle_photos_are_downscaled_and_heic_becomes_jpeg(client):
+    item_id, photo_id = _item(client)
+    _details(client, item_id, photo_id, description="Big phone photo", importance="Minor")
+    big = client.post(f"/api/item/{item_id}/photo", content_type="multipart/form-data",
+                      data={"photo": (_big_jpeg(), "IMG_big.jpg"), "photo_id": photo_id}).get_json()
+    heic_item, heic_id = _item(client)
+    _details(client, heic_item, heic_id, description="iPhone photo", importance="Safety")
+    client.post(f"/api/item/{heic_item}/photo", content_type="multipart/form-data",
+                data={"photo": (_heic(), "IMG_7.HEIC"), "photo_id": heic_id})
+
+    _, zf = _export(client)
+
+    folder = "Elm St _ Level 2"
+    names = sorted(n.split("/", 2)[-1] for n in zf.namelist() if "/photos/" in n)
+    assert names == [big["filename"], f"{heic_id}_IMG_7.jpg"]
+    with Image.open(zf.open(f"{folder}/photos/{big['filename']}")) as image:
+        assert max(image.size) == 2560 and image.size == (2560, 1920)
+    assert zf.getinfo(f"{folder}/photos/{big['filename']}").file_size < _big_jpeg().getbuffer().nbytes
+    assert _record(zf, f"{folder}/photos/{big['filename']}")["description"] == "Big phone photo"
+    with Image.open(zf.open(f"{folder}/photos/{heic_id}_IMG_7.jpg")) as image:
+        assert image.format == "JPEG" and image.size == (1600, 1200)
+    assert _record(zf, f"{folder}/photos/{heic_id}_IMG_7.jpg")["severity"] == "Safety"
+
+
+def test_build_writes_the_zip_to_disk_and_the_report_uses_the_template(client, tmp_path):
+    """The two-step export, with a firm report uploaded as the template: the
+    docx in the zip is the form, filled, not the generic layout."""
+    from docx import Document
+
+    tpl = Document()
+    tpl.add_paragraph("Specific Items Observed").runs[0].bold = True
+    p = tpl.add_paragraph("ITEM 1.1\tOld item text")
+    p.paragraph_format.left_indent = 914400 * 3 // 2
+    tpl.add_paragraph("Action:\tThe Contractor will review it.")
+    tpl.add_paragraph("End of Report")
+    buf = io.BytesIO()
+    tpl.save(buf)
+    buf.seek(0)
+    r = client.post("/api/template", data={"template": (buf, "past_report.docx")},
+                    content_type="multipart/form-data")
+    assert r.status_code == 200 and r.get_json()["layout"] == "report"
+
+    item_id, photo_id = _item(client)
+    _details(client, item_id, photo_id, description="Cracked beam", importance="Major")
+    _photo(client, item_id, "IMG_1.jpg", "red")
+
+    built = client.post("/api/export/build").get_json()
+    assert built["notice"] is None and built["bytes"] > 0
+    zf = zipfile.ZipFile(io.BytesIO(client.get("/api/export/download").data))
+    doc = Document(io.BytesIO(zf.read("Elm St _ Level 2/site_visit_report.docx")))
+    text = "\n".join(p.text for p in doc.paragraphs)
+    assert "Specific Items Observed" in text and "ITEM 1\tCracked beam" in text
+    assert "End of Report" in text
+    assert "Old item text" not in text and "will review it" not in text
+    assert "Site Visit Report" not in text          # not the generic layout

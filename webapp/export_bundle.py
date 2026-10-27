@@ -2,16 +2,19 @@
 
     <report name>/
         site_visit_report.docx
-        photos/<photo file>        each photo, with its entry written into EXIF
+        photos/<photo file>        each included photo, its entry written into
+                                   EXIF, downscaled to 2560 px (HEIC -> JPEG)
         plans/<plan>_page<N>.png   each plan page that has a pin, pins drawn on
 
-Glue between visit.json and the sitescribe modules (photos, plans,
-plan_markup). The JSON -> models mapping here is the minimum this export
-needs; bridge.py (#8) takes it over when it lands.
+Takes the `Project` that bridge.to_project() built for the Word report, so
+the visit is mapped and the plan pages rendered once per export, and writes
+the zip straight to a file: a 60-photo visit is no longer held in memory
+twice over.
 
-Each photo entry is an observation with its own details (#27); the item's
-are the fallback for records written before that. Pins are numbered by item
-(001_02 -> 1), and entries of one item at the same spot share a pin.
+Photos are shrunk before they go in. Phone originals run 3-12 MB each and a
+zip of them is what made exports time out on the tunnel and fail to download
+on a phone; at 2560 px a photo is still far larger than it prints and the zip
+is a fifth the size. The originals stay on the server.
 """
 
 from __future__ import annotations
@@ -20,9 +23,8 @@ import io
 import re
 import shutil
 import sys
-import tempfile
 import zipfile
-from datetime import datetime
+from dataclasses import replace
 from pathlib import Path
 
 try:
@@ -30,111 +32,128 @@ try:
 except ImportError:  # started as `python server.py` from inside webapp/
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sitescribe import photos, plan_markup, plans
-from sitescribe.models import Observation, PlanPin, Project, Severity
+from sitescribe import photos, plan_markup
+from sitescribe.models import Observation, Project
 
-_DETAILS = ("description", "importance", "tags", "location", "include")
+PHOTO_MAX_PX = 2560
+_JPEG_QUALITY = 88
+_HEIC = {".heic", ".heif"}
 
 
-def build_zip(data: dict, report_docx: bytes, *, name: str, item_dir, plans_dir: str) -> io.BytesIO:
-    """Zip the report, tagged photos and pinned plan pages under one folder.
-
-    item_dir(item_id) gives the folder an item's photos live in; plans_dir
-    is the folder the plan files live in.
-    """
+def write_zip(project: Project | None, report_docx: bytes, *, name: str,
+              out_path: Path, work_dir: Path) -> Path:
+    """Write the bundle zip to out_path and return it. work_dir is scratch
+    space for the tagged photo copies and pinned plan pages; the caller owns
+    it. With no project (the visit could not be mapped) the zip holds the
+    report alone."""
     folder = folder_name(name)
-    entries = list(_entries(data, item_dir))
-    buf = io.BytesIO()
-    with tempfile.TemporaryDirectory() as tmp, \
-            zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        tmp = Path(tmp)
+    out_path, work_dir = Path(out_path), Path(work_dir)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    # JPEG, PNG and docx are already compressed: storing them is as small and much faster
+    with zipfile.ZipFile(out_path, "w", zipfile.ZIP_STORED) as zf:
         zf.writestr(f"{folder}/site_visit_report.docx", report_docx)
-
-        for obs, photo in entries:
-            if photo is None:
-                continue
-            out = tmp / "photos" / photo.name
-            try:
-                photos.embed_observation(obs, out)
-            except Exception as exc:
-                # a photo that can't take EXIF still belongs in the folder
-                print(f"[sitescribe] could not write EXIF into {photo}: {exc!r}",
-                      file=sys.stderr)
-                out.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(photo, out)
-            zf.write(out, f"{folder}/photos/{photo.name}")
-
-        for arcname, png in _pinned_plan_pages(data, entries, plans_dir, tmp):
+        if project is None:
+            return out_path
+        included = [o for o in project.observations if o.include]
+        for obs in included:
+            for photo in _photo_paths(obs):
+                try:
+                    out = tagged_copy(obs, photo, work_dir / "photos")
+                except Exception as exc:
+                    # a photo that can't be read or tagged still belongs in the folder
+                    print(f"[sitescribe] could not shrink/tag {photo}: {exc!r}", file=sys.stderr)
+                    out = work_dir / "photos" / photo.name
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(photo, out)
+                zf.write(out, f"{folder}/photos/{out.name}")
+        for arcname, png in pinned_plan_pages(project, included, work_dir / "marked"):
             zf.write(png, f"{folder}/plans/{arcname}")
-    buf.seek(0)
-    return buf
+    return out_path
 
 
-def _entries(data: dict, item_dir):
-    """(Observation, photo path or None) for every included entry. An entry
-    whose image isn't taken yet (or an item with no entries) still has a pin
-    for the plans; it just has no photo to tag."""
-    for item in sorted(data.get("items", []), key=lambda it: str(it.get("item_id"))):
-        entries = sorted(item.get("photos") or [], key=lambda ph: ph.get("seq") or 0)
-        if not entries:
-            if item.get("include", True):
-                yield _observation(item, {}, None), None
-            continue
-        for ph in entries:
-            if ph.get("include", item.get("include", True)) is False:
-                continue
-            path = Path(item_dir(item["item_id"])) / ph["filename"] if ph.get("filename") else None
-            if path is not None and not path.exists():
-                path = None
-            yield _observation(item, ph, path), path
+def build_zip(project: Project | None, report_docx: bytes, *, name: str, work_dir: Path) -> io.BytesIO:
+    """The same zip in memory, for the one-request /api/export/bundle route."""
+    path = write_zip(project, report_docx, name=name, out_path=Path(work_dir) / "bundle.zip",
+                     work_dir=work_dir)
+    return io.BytesIO(path.read_bytes())
 
 
-def _observation(item: dict, ph: dict, path: Path | None) -> Observation:
-    details = {k: ph.get(k, item.get(k)) for k in _DETAILS}
-    description = (details["description"] or "").strip()
-    caption = (ph.get("caption") or "").strip()
+def _photo_paths(obs: Observation) -> list[Path]:
+    paths = list(obs.photos) or ([obs.photo_path] if obs.photo_path else [])
+    out, seen = [], set()
+    for p in paths:
+        p = Path(p)
+        if p not in seen and p.is_file():
+            seen.add(p)
+            out.append(p)
+    return out
+
+
+def tagged_copy(obs: Observation, photo: Path, out_dir: Path) -> Path:
+    """A copy of `photo` in out_dir, downscaled to PHOTO_MAX_PX and with the
+    entry written into its EXIF. HEIC comes out as JPEG so it opens anywhere;
+    a JPEG that is already small keeps its original pixels."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / (photo.stem + ".jpg" if photo.suffix.lower() in _HEIC else photo.name)
+    _shrink(photo, out)
+    # the EXIF record names this photo's own caption, as the report does
+    caption = (obs.captions.get(photo.name) or "").strip()
+    description = obs.description.strip()
     if caption:
         description = f"{description} — {caption}" if description else caption
-    obs = Observation(
-        photo_path=path,
-        description=description,
-        severity=_severity(details["importance"]),
-        tags=list(details["tags"] or []),
-        pin=_pin(details["location"]),
-        number=_number(item.get("item_id")),
-        id=str(ph.get("photo_id") or item.get("item_id")),
-    )
-    taken = _parse_time(ph.get("created") or item.get("created"))
-    if taken:
-        obs.taken_at = taken
-    return obs
+    tagged = replace(obs, photo_path=out, photos=[out], description=description)
+    return photos.embed_observation(tagged, out)
 
 
-def _pinned_plan_pages(data: dict, entries, plans_dir: str, tmp: Path):
-    """(zip name, png path) for every plan page with at least one pin."""
-    observations = [obs for obs, _ in entries]
-    pinned = {obs.pin.sheet_id for obs in observations if obs.pin}
-    used_stems = set()
-    for plan in data.get("plans", []):
-        plan_id = plan.get("plan_id")
-        if not any(sheet_id.startswith(f"{plan_id}:") for sheet_id in pinned):
-            continue
-        source = Path(plans_dir) / plan["file"]
+def _shrink(src: Path, out: Path) -> None:
+    from PIL import Image, ImageOps
+
+    if src.suffix.lower() in _HEIC:
         try:
-            sheets = plans.load_plan_set(source, tmp / "sheets" / str(plan_id))
-        except Exception as exc:
-            print(f"[sitescribe] could not render plan {source}: {exc!r}", file=sys.stderr)
+            from pillow_heif import register_heif_opener
+        except ImportError as exc:
+            raise ImportError("HEIC photos need pillow-heif: pip install pillow-heif") from exc
+        register_heif_opener()
+    with Image.open(src) as im:
+        small = max(im.size) <= PHOTO_MAX_PX
+        if small and src.suffix.lower() not in _HEIC:
+            shutil.copyfile(src, out)      # nothing to gain from re-encoding
+            return
+        upright = ImageOps.exif_transpose(im)
+        upright.thumbnail((PHOTO_MAX_PX, PHOTO_MAX_PX))
+        exif = upright.info.get("exif")   # capture time and GPS come along; orientation is reset
+        if out.suffix.lower() == ".png":
+            upright.save(out, "PNG", optimize=True, **({"exif": exif} if exif else {}))
+        else:
+            upright.convert("RGB").save(out, "JPEG", quality=_JPEG_QUALITY,
+                                        **({"exif": exif} if exif else {}))
+
+
+def pinned_plan_pages(project: Project, observations: list[Observation], out_dir: Path):
+    """(zip name, png path) for every plan page with at least one pin, pins
+    drawn by plan_markup. Sheets come from the Project (rendered by bridge),
+    so nothing is rendered twice."""
+    pinned = {o.pin.sheet_id for o in observations if o.pin}
+    shown = replace(project, observations=observations)
+    used_stems: set = set()
+    stems: dict[str, str] = {}          # one stem per source plan file
+    for sheet in project.plans:
+        key = str(sheet.source_pdf)
+        if key not in stems:
+            stems[key] = _unique(_safe(_plan_label(sheet.name)), used_stems)
+        if sheet.id not in pinned:
             continue
-        for sheet in sheets:
-            sheet.id = _sheet_id(plan_id, sheet.page_index + 1)
-        project = Project(name="export", plans=sheets, observations=observations)
-        stem = _unique(_safe(Path(plan.get("name") or plan["file"]).stem), used_stems)
-        for sheet in sheets:
-            if sheet.id not in pinned:
-                continue
-            arcname = f"{stem}_page{sheet.page_index + 1}.png"
-            png = tmp / "marked" / str(plan_id) / arcname
-            yield arcname, plan_markup.sheet_image_with_pins(project, sheet.id, png)
+        arcname = f"{stems[key]}_page{sheet.page_index + 1}.png"
+        png = Path(out_dir) / _safe(key.replace("/", "_"))[-60:] / arcname
+        try:
+            yield arcname, plan_markup.sheet_image_with_pins(shown, sheet.id, png)
+        except Exception as exc:
+            print(f"[sitescribe] could not draw pins on {sheet.name}: {exc!r}", file=sys.stderr)
+
+
+def _plan_label(sheet_name: str) -> str:
+    """bridge names pages "<plan>, page N"; the zip wants "<plan>"."""
+    return re.sub(r", page \d+$", "", sheet_name or "") or "plan"
 
 
 def _unique(stem: str, used: set) -> str:
@@ -146,37 +165,6 @@ def _unique(stem: str, used: set) -> str:
         name = f"{stem} ({n})"
     used.add(name.lower())
     return name
-
-
-def _sheet_id(plan_id, page) -> str:
-    return f"{plan_id}:{page}"
-
-
-def _pin(location) -> PlanPin | None:
-    if not location or not location.get("plan_id"):
-        return None
-    return PlanPin(_sheet_id(location["plan_id"], int(location.get("page") or 1)),
-                   float(location["x"]), float(location["y"]))
-
-
-def _severity(value) -> Severity:
-    try:
-        return Severity(value)
-    except ValueError:
-        return Severity.INFO
-
-
-def _number(item_id) -> int:
-    """I-003 -> 3, and 003 -> 3 after #27's ids."""
-    match = re.search(r"\d+", str(item_id or ""))
-    return int(match.group()) if match else 0
-
-
-def _parse_time(value) -> datetime | None:
-    try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
 
 
 def _safe(text: str) -> str:
