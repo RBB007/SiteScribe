@@ -1,7 +1,16 @@
 """SiteScribe — structural site-visit observation tool.
 
-Single-file Flask backend. Visits hold items (observations); items hold photos.
-State lives in data/visit.json; uploads live under uploads/.
+Single-file Flask backend. Projects hold a visit; a visit holds items
+(observations); items hold photos and audio clips.
+
+Storage:
+    data/projects.json            index of every project
+    data/<pid>/visit.json         that project's items + plans
+    uploads/<pid>/<item_id>/...   that project's photos + audio
+    uploads/<pid>/plans/...       that project's plan files
+
+The open project lives in session["pid"], so the item/photo/audio/plan
+routes keep their original URLs and resolve their paths against it.
 """
 
 from flask import (Flask, render_template, render_template_string, request,
@@ -15,6 +24,7 @@ import functools
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import threading
@@ -22,14 +32,16 @@ import time
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE, "data")
-DATA_FILE = os.path.join(DATA_DIR, "visit.json")
 UPLOADS = os.path.join(BASE, "uploads")
-PLANS_DIR = os.path.join(UPLOADS, "plans")
+PROJECTS_FILE = os.path.join(DATA_DIR, "projects.json")
+LEGACY_DATA_FILE = os.path.join(DATA_DIR, "visit.json")
 
-for d in (DATA_DIR, UPLOADS, PLANS_DIR):
+for d in (DATA_DIR, UPLOADS):
     os.makedirs(d, exist_ok=True)
 
 IMPORTANCE = ["Info", "Minor", "Major", "Critical", "Safety"]
+PID_RE = re.compile(r"^P-\d{3}$")
+MAX_NAME = 120
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SITESCRIBE_SECRET", os.urandom(32).hex())
@@ -132,18 +144,72 @@ def _now():
         microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _iso(ts):
+    return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).replace(
+        microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def valid_pid(pid):
+    return isinstance(pid, str) and PID_RE.match(pid) is not None
+
+
+def project_data_dir(pid):
+    return os.path.join(DATA_DIR, pid)
+
+
+def project_uploads(pid):
+    return os.path.join(UPLOADS, pid)
+
+
+def current_pid():
+    """The project this browser session has open, or None."""
+    pid = session.get("pid")
+    if not valid_pid(pid) or not os.path.isdir(project_data_dir(pid)):
+        return None
+    return pid
+
+
+def require_project(fn):
+    @functools.wraps(fn)
+    def wrapper(*a, **kw):
+        if current_pid() is None:
+            if request.path.startswith("/api/"):
+                return jsonify(error="no project open"), 409
+            return redirect(url_for("index"))
+        return fn(*a, **kw)
+    return wrapper
+
+
+def data_file(pid=None):
+    pid = pid or current_pid()
+    return os.path.join(project_data_dir(pid), "visit.json")
+
+
+def plans_dir(pid=None):
+    pid = pid or current_pid()
+    return os.path.join(project_uploads(pid), "plans")
+
+
+def item_dir(item_id, pid=None):
+    pid = pid or current_pid()
+    return os.path.join(project_uploads(pid), secure_filename(item_id))
+
+
 def _blank():
     return {"items": [], "plans": []}
 
 
-def load():
-    if not os.path.exists(DATA_FILE):
+def load(pid=None):
+    path = data_file(pid)
+    if not os.path.exists(path):
         return _blank()
     try:
-        with open(DATA_FILE, "r", encoding="utf-8") as fh:
+        with open(path, "r", encoding="utf-8") as fh:
             data = json.load(fh)
+        if not isinstance(data, dict):
+            raise ValueError("visit.json is not an object")
     except (OSError, ValueError) as exc:
-        print(f"[sitescribe] visit.json unreadable ({exc}); starting empty", file=sys.stderr)
+        print(f"[sitescribe] {path} unreadable ({exc}); starting empty", file=sys.stderr)
         return _blank()
     data.setdefault("items", [])
     data.setdefault("plans", [])
@@ -161,12 +227,14 @@ def load():
     return data
 
 
-def save(data):
+def save(data, pid=None):
     # write to a temp file first so a crash mid-write cannot truncate the visit
-    tmp = DATA_FILE + ".tmp"
+    path = data_file(pid)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2)
-    os.replace(tmp, DATA_FILE)
+    os.replace(tmp, path)
 
 
 def find_item(data, item_id):
@@ -181,10 +249,6 @@ def find_photo(item, photo_id):
         if p["photo_id"] == photo_id:
             return p
     return None
-
-
-def item_dir(item_id):
-    return os.path.join(UPLOADS, secure_filename(item_id))
 
 
 def next_item_id(data):
@@ -242,18 +306,215 @@ def need_photo(item, photo_id):
     return p
 
 
+# ---------------------------------------------------------------- projects
+
+def load_index():
+    if not os.path.exists(PROJECTS_FILE):
+        return {"projects": []}
+    try:
+        with open(PROJECTS_FILE, "r", encoding="utf-8") as fh:
+            idx = json.load(fh)
+        if not isinstance(idx, dict) or not isinstance(idx.get("projects"), list):
+            raise ValueError("projects.json is not an index object")
+    except (OSError, ValueError) as exc:
+        print(f"[sitescribe] projects.json unreadable ({exc}); starting empty", file=sys.stderr)
+        return {"projects": []}
+    idx["projects"] = [p for p in idx["projects"]
+                       if isinstance(p, dict) and valid_pid(p.get("project_id"))]
+    return idx
+
+
+def save_index(idx):
+    tmp = PROJECTS_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(idx, fh, indent=2)
+    os.replace(tmp, PROJECTS_FILE)
+
+
+def find_project(idx, pid):
+    for p in idx["projects"]:
+        if p.get("project_id") == pid:
+            return p
+    return None
+
+
+def need_project(idx, pid):
+    # a pid off the wire must never reach a filesystem path unvalidated
+    if not valid_pid(pid):
+        raise ApiError(f"no such project: {pid}", 404)
+    p = find_project(idx, pid)
+    if p is None:
+        raise ApiError(f"no such project: {pid}", 404)
+    return p
+
+
+def next_pid(idx):
+    """Max existing id + 1, so deleting a project never recycles its id."""
+    n = 0
+    for p in idx["projects"]:
+        try:
+            n = max(n, int(str(p.get("project_id", "")).split("-")[-1]))
+        except (ValueError, IndexError):
+            continue
+    try:
+        for entry in os.listdir(DATA_DIR):
+            if PID_RE.match(entry):
+                n = max(n, int(entry.split("-")[-1]))
+    except OSError:
+        pass
+    return f"P-{n + 1:03d}"
+
+
+def _counts(pid):
+    """(items, photos, included) for a project; zeros if its file is unusable."""
+    items = photos = included = 0
+    try:
+        with open(data_file(pid), "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        for it in data["items"]:
+            items += 1
+            photos += len(it.get("photos") or [])
+            if it.get("include", True):
+                included += 1
+    except Exception:
+        # one corrupt project must never break the whole listing
+        return 0, 0, 0
+    return items, photos, included
+
+
+def project_dict(p):
+    pid = p["project_id"]
+    created = p.get("created") or _now()
+    try:
+        updated = _iso(os.path.getmtime(data_file(pid)))
+    except OSError:
+        updated = created
+    items, photos, included = _counts(pid)
+    return {"project_id": pid, "name": p.get("name") or pid, "created": created,
+            "updated": updated, "items": items, "photos": photos,
+            "included": included}
+
+
+def clean_name(raw, default=None):
+    name = ("" if raw is None else str(raw)).strip()
+    if not name:
+        if default is None:
+            raise ApiError("name required")
+        return default
+    if len(name) > MAX_NAME:
+        raise ApiError(f"name must be {MAX_NAME} characters or fewer")
+    return name
+
+
+def auto_name(ts=None):
+    when = (datetime.datetime.now(datetime.timezone.utc) if ts is None
+            else datetime.datetime.fromtimestamp(ts, datetime.timezone.utc))
+    return "Site Visit " + when.strftime("%Y-%m-%d %H:%M")
+
+
+def make_project(name, created=None, idx=None):
+    """Allocate a pid, build its directories and an empty visit, index it."""
+    own = idx is None
+    if own:
+        idx = load_index()
+    pid = next_pid(idx)
+    os.makedirs(project_data_dir(pid), exist_ok=True)
+    os.makedirs(plans_dir(pid), exist_ok=True)
+    entry = {"project_id": pid, "name": name, "created": created or _now()}
+    save(_blank(), pid)
+    idx["projects"].append(entry)
+    if own:
+        save_index(idx)
+    return entry
+
+
+@app.route("/api/projects")
+@require_pin
+def api_projects():
+    with _lock:
+        idx = load_index()
+        out = [project_dict(p) for p in idx["projects"]]
+    out.sort(key=lambda p: (p["updated"], p["project_id"]), reverse=True)
+    return jsonify(projects=out, current=current_pid())
+
+
+@app.route("/api/projects", methods=["POST"])
+@require_pin
+def api_project_create():
+    body = request.get_json(silent=True) or {}
+    name = clean_name(body.get("name"), default=auto_name())
+    with _lock:
+        entry = make_project(name)
+        out = project_dict(entry)
+    session["pid"] = entry["project_id"]
+    return jsonify(out)
+
+
+@app.route("/api/projects/close", methods=["POST"])
+@require_pin
+def api_project_close():
+    session.pop("pid", None)
+    return jsonify(ok=True)
+
+
+@app.route("/api/projects/<pid>/open", methods=["POST"])
+@require_pin
+def api_project_open(pid):
+    with _lock:
+        entry = need_project(load_index(), pid)
+        out = project_dict(entry)
+    session["pid"] = pid
+    return jsonify(out)
+
+
+@app.route("/api/projects/<pid>", methods=["PATCH"])
+@require_pin
+def api_project_patch(pid):
+    body = request.get_json(silent=True) or {}
+    name = clean_name(body.get("name"))
+    with _lock:
+        idx = load_index()
+        entry = need_project(idx, pid)
+        entry["name"] = name
+        save_index(idx)
+        return jsonify(project_dict(entry))
+
+
+@app.route("/api/projects/<pid>", methods=["DELETE"])
+@require_pin
+def api_project_delete(pid):
+    with _lock:
+        idx = load_index()
+        entry = need_project(idx, pid)
+        idx["projects"].remove(entry)
+        save_index(idx)
+        shutil.rmtree(project_data_dir(pid), ignore_errors=True)
+        shutil.rmtree(project_uploads(pid), ignore_errors=True)
+    if session.get("pid") == pid:
+        session.pop("pid", None)
+    return jsonify(ok=True)
+
+
 # ---------------------------------------------------------------- pages
 
 @app.route("/")
 @require_pin
 def index():
+    return render_template("landing.html")
+
+
+@app.route("/capture")
+@require_pin
+@require_project
+def capture():
     return render_template("index.html")
 
 
 @app.route("/uploads/<path:relpath>")
 @require_pin
 def uploaded(relpath):
-    # send_from_directory rejects anything that escapes UPLOADS
+    # send_from_directory rejects anything that escapes UPLOADS; the project id
+    # is already part of relpath, so no project needs to be open to view a file
     return send_from_directory(UPLOADS, relpath)
 
 
@@ -261,6 +522,7 @@ def uploaded(relpath):
 
 @app.route("/api/visit")
 @require_pin
+@require_project
 def api_visit():
     with _lock:
         data = load()
@@ -269,6 +531,7 @@ def api_visit():
 
 @app.route("/api/item", methods=["POST"])
 @require_pin
+@require_project
 def api_item_create():
     with _lock:
         data = load()
@@ -311,6 +574,7 @@ def _clean_location(value):
 
 @app.route("/api/item/<item_id>", methods=["PATCH"])
 @require_pin
+@require_project
 def api_item_patch(item_id):
     body = request.get_json(silent=True) or {}
     with _lock:
@@ -342,6 +606,7 @@ def api_item_patch(item_id):
 
 @app.route("/api/item/<item_id>", methods=["DELETE"])
 @require_pin
+@require_project
 def api_item_delete(item_id):
     with _lock:
         data = load()
@@ -356,23 +621,25 @@ def api_item_delete(item_id):
 
 @app.route("/api/item/<item_id>/photo", methods=["POST"])
 @require_pin
+@require_project
 def api_photo_add(item_id):
     f = request.files.get("photo")
     if not f or not f.filename:
         raise ApiError("no photo uploaded")
+    pid = current_pid()
     with _lock:
         data = load()
         item = need_item(data, item_id)
         photo_id = next_photo_id(item)
         safe = secure_filename(f.filename) or "photo.jpg"
         filename = f"{photo_id}_{safe}"
-        d = item_dir(item_id)
+        d = item_dir(item_id, pid)
         os.makedirs(d, exist_ok=True)
         f.save(os.path.join(d, filename))
         photo = {
             "photo_id": photo_id,
             "filename": filename,
-            "url": f"/uploads/{item_id}/{filename}",
+            "url": f"/uploads/{pid}/{item_id}/{filename}",
             "caption": "",
             "created": _now(),
         }
@@ -383,6 +650,7 @@ def api_photo_add(item_id):
 
 @app.route("/api/item/<item_id>/photo/<photo_id>", methods=["PATCH"])
 @require_pin
+@require_project
 def api_photo_patch(item_id, photo_id):
     body = request.get_json(silent=True) or {}
     with _lock:
@@ -397,6 +665,7 @@ def api_photo_patch(item_id, photo_id):
 
 @app.route("/api/item/<item_id>/photo/<photo_id>", methods=["DELETE"])
 @require_pin
+@require_project
 def api_photo_delete(item_id, photo_id):
     with _lock:
         data = load()
@@ -440,6 +709,7 @@ def transcribe(path):
 
 @app.route("/api/item/<item_id>/audio", methods=["POST"])
 @require_pin
+@require_project
 def api_audio(item_id):
     f = request.files.get("audio")
     if not f or not f.filename:
@@ -447,16 +717,17 @@ def api_audio(item_id):
 
     # "false"/"0"/"no" means: keep the recording, do not send it anywhere
     want_text = str(request.form.get("transcribe", "true")).lower() not in ("false", "0", "no")
+    pid = current_pid()
 
     with _lock:
-        data = load()
+        data = load(pid)
         item = need_item(data, item_id)
         safe = secure_filename(f.filename) or "audio.webm"
         # keep every recording: <item>_audio_01_<name>
         existing = item.get("audio_clips") or []
         seq = f"{len(existing) + 1:02d}"
         filename = f"{item_id}_audio_{seq}_{safe}"
-        d = item_dir(item_id)
+        d = item_dir(item_id, pid)
         os.makedirs(d, exist_ok=True)
         path = os.path.join(d, filename)
         f.save(path)
@@ -466,12 +737,12 @@ def api_audio(item_id):
     transcript = transcribe(path) if want_text else ""
 
     with _lock:
-        data = load()
+        data = load(pid)
         item = need_item(data, item_id)
         clip = {
             "clip_id": f"{item_id}-A-{seq}",
             "filename": filename,
-            "url": f"/uploads/{item_id}/{filename}",
+            "url": f"/uploads/{pid}/{item_id}/{filename}",
             "bytes": size,
             "transcript": transcript,
             "created": _now(),
@@ -481,13 +752,14 @@ def api_audio(item_id):
         item["audio"] = {"filename": filename, "transcript": transcript}
         if transcript and not (item.get("description") or "").strip():
             item["description"] = transcript
-        save(data)
+        save(data, pid)
         return jsonify(clip=clip, transcript=transcript,
                        description=item.get("description", ""))
 
 
 @app.route("/api/item/<item_id>/audio/<clip_id>", methods=["DELETE"])
 @require_pin
+@require_project
 def api_audio_delete(item_id, clip_id):
     with _lock:
         data = load()
@@ -521,16 +793,20 @@ def pdf_pages(path):
 
 @app.route("/api/plan", methods=["POST"])
 @require_pin
+@require_project
 def api_plan():
     f = request.files.get("plan")
     if not f or not f.filename:
         raise ApiError("no plan uploaded")
+    pid = current_pid()
     with _lock:
         data = load()
         plan_id = next_plan_id(data)
         safe = secure_filename(f.filename) or "plan.pdf"
         filename = f"{plan_id}_{safe}"
-        path = os.path.join(PLANS_DIR, filename)
+        d = plans_dir(pid)
+        os.makedirs(d, exist_ok=True)
+        path = os.path.join(d, filename)
         f.save(path)
         # the frontend picks PDF.js vs <img> off `name`, so keep the real extension
         name = os.path.basename(f.filename)
@@ -539,7 +815,7 @@ def api_plan():
             "plan_id": plan_id,
             "name": name,
             "file": filename,
-            "url": f"/uploads/plans/{filename}",
+            "url": f"/uploads/{pid}/plans/{filename}",
             "pages": pages,
         }
         data["plans"].append(plan)
@@ -551,6 +827,7 @@ def api_plan():
 
 @app.route("/api/export/docx")
 @require_pin
+@require_project
 def api_export_docx():
     try:
         from docx import Document
@@ -624,6 +901,79 @@ def handle_any(exc):
     if request.path.startswith("/api/"):
         return jsonify(error="internal server error"), 500
     return "Internal Server Error", 500
+
+
+# ---------------------------------------------------------------- migration
+
+def migrate_legacy():
+    """Fold a pre-projects single visit into its own project. Idempotent."""
+    if not os.path.exists(LEGACY_DATA_FILE):
+        return None
+    with _lock:
+        if not os.path.exists(LEGACY_DATA_FILE):
+            return None
+        mtime = os.path.getmtime(LEGACY_DATA_FILE)
+        idx = load_index()
+        pid = next_pid(idx)
+        os.makedirs(project_data_dir(pid), exist_ok=True)
+        os.makedirs(project_uploads(pid), exist_ok=True)
+        dest = os.path.join(project_data_dir(pid), "visit.json")
+        os.replace(LEGACY_DATA_FILE, dest)
+
+        moved = []
+        for entry in sorted(os.listdir(UPLOADS)):
+            src = os.path.join(UPLOADS, entry)
+            # leave already-migrated project trees alone
+            if not os.path.isdir(src) or PID_RE.match(entry):
+                continue
+            shutil.move(src, os.path.join(project_uploads(pid), entry))
+            moved.append(entry)
+        os.makedirs(plans_dir(pid), exist_ok=True)
+
+        _reprefix_urls(dest, pid, mtime)
+
+        idx["projects"].append({"project_id": pid, "name": auto_name(mtime),
+                                "created": _iso(mtime)})
+        save_index(idx)
+    print(f"[sitescribe] migrated legacy visit.json into {pid} "
+          f"({auto_name(mtime)}); moved {len(moved)} upload dir(s): "
+          f"{', '.join(moved) or 'none'}", file=sys.stderr)
+    return pid
+
+
+def _reprefix_urls(path, pid, mtime):
+    """Legacy /uploads/<item>/... urls now live one level deeper."""
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError) as exc:
+        print(f"[sitescribe] could not rewrite urls in {path}: {exc}", file=sys.stderr)
+        return
+
+    def fix(rec):
+        url = rec.get("url")
+        if isinstance(url, str) and url.startswith("/uploads/") and \
+                not url.startswith(f"/uploads/{pid}/"):
+            rec["url"] = "/uploads/" + pid + url[len("/uploads"):]
+
+    for it in data.get("items") or []:
+        if not isinstance(it, dict):
+            continue
+        for rec in (it.get("photos") or []) + (it.get("audio_clips") or []):
+            if isinstance(rec, dict):
+                fix(rec)
+    for pl in data.get("plans") or []:
+        if isinstance(pl, dict):
+            fix(pl)
+
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2)
+    os.replace(tmp, path)
+    os.utime(path, (mtime, mtime))  # keep "updated" honest for the listing
+
+
+migrate_legacy()
 
 
 if __name__ == "__main__":

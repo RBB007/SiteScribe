@@ -24,6 +24,25 @@ cloudflared tunnel --url http://localhost:5000
 
 Plain HTTP on a LAN IP **silently** blocks the microphone.
 
+## Reports (projects)
+
+The landing page at `/` lists every report and creates new ones. Opening one
+stores it in the session and sends you to `/capture`.
+
+```
+data/projects.json            the index
+data/P-001/visit.json         that report's items + plans
+uploads/P-001/I-001/...       its photos and audio
+uploads/P-001/plans/...
+```
+
+Leaving the name blank auto-names it `Site Visit <YYYY-MM-DD HH:MM>` (UTC).
+Reports are listed newest-edited first with item / photo / included counts.
+
+A legacy single-visit `data/visit.json` is migrated into `P-001` on first
+start — files moved, stored URLs re-prefixed, original mtime preserved. It is
+idempotent.
+
 ## Data model
 
 ```
@@ -80,6 +99,22 @@ description box with no code at all.
 | `POST /api/plan` | multipart `plan` (pdf/image) |
 | `GET /api/export/docx` | Word report of **included** items only |
 | `GET /health` | public, no PIN |
+
+### Reports
+
+| Route | Does |
+|---|---|
+| `GET /` | landing page |
+| `GET /capture` | the capture UI (302 to `/` if no report is open) |
+| `GET /api/projects` | all reports + `current` |
+| `POST /api/projects` | create (blank name → auto date/time name) |
+| `POST /api/projects/<pid>/open` | open it for this session |
+| `PATCH /api/projects/<pid>` | rename |
+| `DELETE /api/projects/<pid>` | delete it and all its files |
+| `POST /api/projects/close` | close without opening another |
+
+Data routes return **409 `no project open`** when none is selected; the UI
+redirects to `/` on a 409.
 
 ## Config
 
