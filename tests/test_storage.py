@@ -27,6 +27,16 @@ def test_observation_defaults_include_everything():
     assert obs.captions == {}
 
 
+def test_caption_for_is_keyed_by_file_name():
+    obs = Observation(description="Crack at beam end",
+                      captions={"001b.jpg": "Close-up"})
+    # Any path form resolves to the file name; photos without an entry fall
+    # back to description.
+    assert obs.caption_for(Path("projects/job/media/001b.jpg")) == "Close-up"
+    assert obs.caption_for("001b.jpg") == "Close-up"
+    assert obs.caption_for(Path("media/001.jpg")) == "Crack at beam end"
+
+
 def test_load_project_saved_before_include_and_captions(tmp_path):
     # A project.json written before these fields existed must still load,
     # with every observation included and no captions.

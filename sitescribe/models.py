@@ -97,10 +97,16 @@ class Observation:
     number: int = 0           # photo number in the report (1, 2, 3...)
     include: bool = True      # False = captured but left out of the report
     # Per-photo captions for observations with more than one photo, keyed by
-    # the photo path as a string (str(photo)). Photos without an entry fall
-    # back to `description`.
+    # the photo's file name (Path(photo).name, e.g. "003_abc_2.jpg"), never
+    # the full path, so the key survives moving the project folder. Photos
+    # without an entry fall back to `description`. Read with caption_for().
     captions: dict[str, str] = field(default_factory=dict)
     id: str = field(default_factory=_new_id)
+
+    def caption_for(self, photo: Path | str) -> str:
+        """The caption to show under this photo: its own entry in `captions`,
+        else `description`."""
+        return self.captions.get(Path(photo).name) or self.description
 
 
 @dataclass
