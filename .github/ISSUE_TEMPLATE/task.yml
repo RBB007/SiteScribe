@@ -1,0 +1,55 @@
+name: Task
+description: One small piece of work for one person. Keep it to something that fits in a day.
+title: "<module>: <what gets built>"
+labels: ["ready"]
+body:
+  - type: input
+    id: module
+    attributes:
+      label: Module
+      description: Which file this lives in.
+      placeholder: sitescribe/word_report.py
+    validations:
+      required: true
+  - type: input
+    id: functions
+    attributes:
+      label: Function(s)
+      description: The function(s) to fill in. Keep the names and signatures as they are in the file.
+      placeholder: build_report(project, out_docx)
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What to build
+      description: What goes in, what comes out, what it should look like. Link to a sketch or example if you have one.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: How we know it works. One line per check.
+      placeholder: |
+        - [ ] Function returns a Path to a .docx that opens in Word
+        - [ ] One section per observation, photo embedded
+        - [ ] Test in tests/ passes
+    validations:
+      required: true
+  - type: textarea
+    id: depends
+    attributes:
+      label: Depends on
+      description: Other issues or PRs that must land first. Leave blank if none.
+      placeholder: "#12"
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      options:
+        - small (an hour or two)
+        - medium (half a day)
+        - large (a day or more - consider splitting)
+    validations:
+      required: true
