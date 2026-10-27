@@ -152,8 +152,11 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   <h2>Description</h2>
   <textarea id="desc" placeholder="Describe the observation — or record a voice note and it will be transcribed here."></textarea>
   <div class="row" style="margin-top:9px">
-    <button class="ghost" id="btnRec">● Record</button>
-    <button class="ghost" id="btnPlay" disabled>Play</button>
+    <button id="btnDictate">&#127908; Dictate</button>
+    <button class="ghost" id="btnRec">● Record audio</button>
+  </div>
+  <div class="row" style="margin-top:7px">
+    <button class="ghost" id="btnPlay" disabled>Play recording</button>
   </div>
   <audio id="audio" hidden></audio>
   <div class="msg" id="recMsg"></div>
@@ -359,7 +362,73 @@ let dT; $('desc').oninput = () => { clearTimeout(dT); dT = setTimeout(()=>patch(
 let tT; $('tags').oninput = () => { clearTimeout(tT); tT = setTimeout(()=>
   patch({tags: $('tags').value.split(",").map(s=>s.trim()).filter(Boolean)}), 700); };
 
-/* ---------------- audio ---------------- */
+/* ---------------- dictation (Web Speech API: free, no key) ---------------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let sr = null, dictating = false, baseText = "";
+
+if (!SR) {
+  $('btnDictate').disabled = true;
+  $('btnDictate').title = "This browser has no speech recognition";
+}
+
+$('btnDictate').onclick = () => {
+  if (!item()) return say("Create an item first", "bad");
+  if (!SR) { $('recMsg').className="msg bad";
+    $('recMsg').textContent="No browser dictation here — use the mic key on your keyboard."; return; }
+
+  if (dictating) { sr.stop(); return; }
+
+  sr = new SR();
+  sr.lang = "en-US";
+  sr.continuous = true;
+  sr.interimResults = true;
+
+  baseText = $('desc').value;
+  if (baseText && !baseText.endsWith(" ")) baseText += " ";
+
+  sr.onstart = () => {
+    dictating = true;
+    $('btnDictate').textContent = "■ Stop dictating";
+    $('recMsg').className = "msg warn";
+    $('recMsg').textContent = "Listening — speak now.";
+  };
+
+  sr.onresult = e => {
+    let finalTxt = "", interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalTxt += t; else interim += t;
+    }
+    if (finalTxt) baseText += finalTxt + " ";
+    // show committed text plus the live guess, but only persist the committed part
+    $('desc').value = baseText + interim;
+  };
+
+  sr.onerror = ev => {
+    $('recMsg').className = "msg bad";
+    $('recMsg').textContent =
+      ev.error === "not-allowed" ? "Microphone permission denied."
+      : ev.error === "no-speech" ? "Didn't catch anything — try again."
+      : ev.error === "network"   ? "Dictation needs a network connection."
+      : "Dictation error: " + ev.error;
+  };
+
+  sr.onend = () => {
+    dictating = false;
+    $('btnDictate').innerHTML = "&#127908; Dictate";
+    $('desc').value = baseText.trimEnd();
+    patch({description: $('desc').value});
+    if (!$('recMsg').classList.contains("bad")) {
+      $('recMsg').className = "msg ok";
+      $('recMsg').textContent = baseText.trim() ? "Dictation saved." : "Nothing captured.";
+    }
+  };
+
+  try { sr.start(); }
+  catch (err) { $('recMsg').className="msg bad"; $('recMsg').textContent = "Could not start: " + err.message; }
+};
+
+/* ---------------- audio recording (optional, needs OPENAI_API_KEY to transcribe) ---------------- */
 let mr, chunks=[], rec=false;
 $('btnRec').onclick = async () => {
   if (!item()) return say("Create an item first","bad");
@@ -382,7 +451,7 @@ $('btnRec').onclick = async () => {
           $('recMsg').className = "msg " + (r.transcript ? "ok" : "warn");
           $('recMsg').textContent = r.transcript
             ? "Transcribed into the description."
-            : "Saved. No transcript (OPENAI_API_KEY not set) — type the description.";
+            : "Audio saved. No server transcription — use Dictate, or the mic key on your keyboard.";
         }catch(err){ $('recMsg').className="msg bad"; $('recMsg').textContent=err.message; }
       };
       mr.start(); rec=true; $('btnRec').textContent="■ Stop";

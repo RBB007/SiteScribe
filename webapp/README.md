@@ -40,6 +40,20 @@ useful when embedding the ID into the photo and when placing it in the report.
 fractions, never pixels**. A marker placed on a phone then renders correctly at
 any other size in the Word report.
 
+## Voice to text
+
+Two independent paths, so the app never depends on a paid key:
+
+1. **Dictate** (primary) — Web Speech API, runs in the browser, **free, no key**.
+   Works in Chrome/Android and Safari/iOS 14.5+. Live interim text appears as you
+   speak; only finalized text is persisted. Needs HTTPS, which the tunnel provides.
+2. **Record audio** (optional) — uploads the clip; transcribed by Whisper only if
+   `OPENAI_API_KEY` is set. Whisper is ~$0.006/min and handles structural jargon
+   noticeably better.
+
+If neither is available, the phone keyboard's own mic key dictates into the
+description box with no code at all.
+
 ## Severity
 
 `Info · Minor · Major · Critical · Safety` — from the Summary slide.
@@ -54,7 +68,7 @@ any other size in the Word report.
 | `DELETE /api/item/<id>` | remove item + its uploads |
 | `POST /api/item/<id>/photo` | multipart `photo` |
 | `PATCH/DELETE /api/item/<id>/photo/<pid>` | caption / remove |
-| `POST /api/item/<id>/audio` | multipart `audio` → transcribes, fills description **only if empty** |
+| `POST /api/item/<id>/audio` | multipart `audio` → Whisper transcription if a key is set; fills description **only if empty** |
 | `POST /api/plan` | multipart `plan` (pdf/image) |
 | `GET /api/export/docx` | Word report of **included** items only |
 | `GET /health` | public, no PIN |
@@ -65,7 +79,7 @@ any other size in the Word report.
 |---|---|
 | `SITESCRIBE_PIN` | `2424` |
 | `SITESCRIBE_SECRET` | random per start |
-| `OPENAI_API_KEY` | unset → audio saves, transcript is empty, UI tells the user to type |
+| `OPENAI_API_KEY` | optional. Unset → the **Dictate** button still works (browser speech recognition, free); only the server-side Whisper transcription of recorded audio is skipped |
 
 **Never commit a key.** Put it in a `.env` on the server only.
 
