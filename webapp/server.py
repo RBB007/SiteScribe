@@ -1108,7 +1108,9 @@ def _write_report(doc, data, pid, *, title, heading, body, caption, Inches):
     plan_names = {p["plan_id"]: p.get("name", p["plan_id"]) for p in data["plans"]}
 
     title("Site Visit Report")
-    body(_local().strftime("%B %d, %Y at %-I:%M %p %Z"))
+    # "%-I" (hour without a leading zero) is glibc-only; Windows strftime rejects it
+    now = _local()
+    body(f"{now:%B %d, %Y} at {now.hour % 12 or 12}:{now:%M %p %Z}")
 
     for it in sorted_items(data):
         for e in sorted_entries(it):
