@@ -1,7 +1,12 @@
 """SiteScribe — structural site-visit observation tool.
 
-Single-file Flask backend. Projects hold a visit; a visit holds items
-(observations); items hold photos and audio clips.
+Single-file Flask backend. Projects hold a visit; a visit holds items;
+an item is only a numbering group for photo entries, and a photo *entry*
+is the observation itself — description, importance, tags, plan location,
+audio clips, include flag and (optionally) an image.
+
+Ids: item "001", photo entry "001_01", audio clip "001_01_A01". An entry
+whose filename is None is a note taken before the picture.
 
 Storage:
     data/projects.json            index of every project
@@ -43,6 +48,9 @@ for d in (DATA_DIR, UPLOADS):
 IMPORTANCE = ["Info", "Minor", "Major", "Critical", "Safety"]
 PID_RE = re.compile(r"^P-\d{3}$")
 MAX_NAME = 120
+MAX_ITEMS = 999      # item ids are 3 digits
+MAX_PHOTOS = 99      # photo seq is 2 digits
+INHERIT_MODES = ("keep", "clear", "new")
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SITESCRIBE_SECRET", os.urandom(32).hex())
@@ -140,6 +148,26 @@ def health():
 _lock = threading.Lock()
 
 
+# Stored timestamps stay UTC (unambiguous); anything a person reads is rendered
+# in the site's local zone. Override with SITESCRIBE_TZ if the team moves.
+LOCAL_TZ_NAME = os.environ.get("SITESCRIBE_TZ", "America/Los_Angeles")
+
+try:
+    from zoneinfo import ZoneInfo
+    LOCAL_TZ = ZoneInfo(LOCAL_TZ_NAME)
+except Exception as exc:  # no tzdata on the box: fall back rather than crash
+    print(f"[sitescribe] timezone {LOCAL_TZ_NAME} unavailable ({exc}); using UTC",
+          file=sys.stderr)
+    LOCAL_TZ = datetime.timezone.utc
+
+
+def _local(ts=None):
+    """A timezone-aware datetime in the site's local zone."""
+    dt = (datetime.datetime.now(datetime.timezone.utc) if ts is None
+          else datetime.datetime.fromtimestamp(ts, datetime.timezone.utc))
+    return dt.astimezone(LOCAL_TZ)
+
+
 def _now():
     return datetime.datetime.now(datetime.timezone.utc).replace(
         microsecond=0).isoformat().replace("+00:00", "Z")
@@ -201,6 +229,7 @@ def _blank():
 
 
 def load(pid=None):
+    pid = pid or current_pid()
     path = data_file(pid)
     if not os.path.exists(path):
         return _blank()
@@ -215,17 +244,37 @@ def load(pid=None):
     data.setdefault("items", [])
     data.setdefault("plans", [])
     data.setdefault("template", None)
+    data["items"] = [it for it in data["items"] if isinstance(it, dict)]
+    upgraded = needs_upgrade(data)
+    if upgraded:
+        upgrade_items(data, pid)
     # backfill fields added after some records were written, so an older
     # visit.json never 500s or silently drops data
     for it in data["items"]:
-        it.setdefault("audio_clips", [])
-        it.setdefault("photos", [])
-        it.setdefault("tags", [])
-        it.setdefault("include", True)
-        it.setdefault("importance", "Info")
-        it.setdefault("description", "")
-        it.setdefault("location", None)
-        it.setdefault("audio", None)
+        it.setdefault("item_id", "000")
+        it.setdefault("created", _now())
+        it["photos"] = [p for p in (it.get("photos") or []) if isinstance(p, dict)]
+        for n, p in enumerate(it["photos"], 1):
+            p.setdefault("photo_id", f"{it['item_id']}_{n:02d}")
+            p["seq"] = photo_seq(p)
+            p.setdefault("filename", None)
+            p.setdefault("url", None)
+            p.setdefault("caption", "")
+            p.setdefault("include", True)
+            p.setdefault("description", "")
+            p.setdefault("importance", "Info")
+            p.setdefault("tags", [])
+            p.setdefault("location", None)
+            p.setdefault("audio_clips", [])
+            p.setdefault("created", it["created"])
+    if upgraded:
+        # persist immediately: the upgrade already moved files on disk, so a
+        # read must not leave the json describing the old layout
+        try:
+            save(data, pid)
+        except OSError as exc:
+            print(f"[sitescribe] could not persist upgrade for {pid}: {exc}",
+                  file=sys.stderr)
     return data
 
 
@@ -253,24 +302,63 @@ def find_photo(item, photo_id):
     return None
 
 
+def _trailing_num(value):
+    """The trailing digits of an id, tolerating old and new formats alike."""
+    m = re.search(r"(\d+)\s*$", str(value or ""))
+    return int(m.group(1)) if m else 0
+
+
+def photo_seq(p):
+    seq = p.get("seq")
+    try:
+        return int(seq)
+    except (TypeError, ValueError):
+        return _trailing_num(str(p.get("photo_id", "")).split("_")[-1])
+
+
 def next_item_id(data):
-    n = 0
-    for it in data["items"]:
-        try:
-            n = max(n, int(str(it["item_id"]).split("-")[-1]))
-        except (ValueError, IndexError):
-            continue
-    return f"I-{n + 1:03d}"
+    n = max((_trailing_num(it.get("item_id")) for it in data["items"]), default=0) + 1
+    if n > MAX_ITEMS:
+        raise ApiError(f"this visit already holds {MAX_ITEMS} items; start a new report")
+    return f"{n:03d}"
 
 
-def next_photo_id(item):
-    n = 0
-    for p in item.get("photos", []):
-        try:
-            n = max(n, int(str(p["photo_id"]).split("-")[-1]))
-        except (ValueError, IndexError):
-            continue
-    return f"{item['item_id']}-P-{n + 1:02d}"
+def next_photo_seq(item):
+    n = max((photo_seq(p) for p in item.get("photos") or []), default=0) + 1
+    if n > MAX_PHOTOS:
+        raise ApiError(f"item {item['item_id']} already holds {MAX_PHOTOS} photos; "
+                       "start a new item")
+    return n
+
+
+def new_entry(item, *, description="", importance="Info", tags=None, location=None):
+    """A fresh photo entry — an observation that may not have its image yet."""
+    seq = next_photo_seq(item)
+    return {
+        "photo_id": f"{item['item_id']}_{seq:02d}",
+        "seq": seq,
+        "filename": None,
+        "url": None,
+        "caption": "",
+        "include": True,
+        "description": description,
+        "importance": importance if importance in IMPORTANCE else "Info",
+        "tags": list(tags or []),
+        "location": dict(location) if location else None,
+        "audio_clips": [],
+        "created": _now(),
+    }
+
+
+def sorted_entries(item):
+    return sorted(item.get("photos") or [], key=photo_seq)
+
+
+def entry_files(entry):
+    """Every file on disk this entry owns: its image and its clips."""
+    names = [entry.get("filename")]
+    names += [c.get("filename") for c in entry.get("audio_clips") or []]
+    return [n for n in names if n]
 
 
 def next_plan_id(data):
@@ -368,16 +456,22 @@ def next_pid(idx):
 
 
 def _counts(pid):
-    """(items, photos, included) for a project; zeros if its file is unusable."""
+    """(items, photos, included) for a project; zeros if its file is unusable.
+
+    `included` counts entries now that include lives on the entry, and the
+    file is read raw, so an old-shape project reports its item-level flag.
+    """
     items = photos = included = 0
     try:
         with open(data_file(pid), "r", encoding="utf-8") as fh:
             data = json.load(fh)
         for it in data["items"]:
             items += 1
-            photos += len(it.get("photos") or [])
-            if it.get("include", True):
-                included += 1
+            entries = it.get("photos") or []
+            photos += len(entries)
+            for e in entries:
+                if e.get("include", it.get("include", True)):
+                    included += 1
     except Exception:
         # one corrupt project must never break the whole listing
         return 0, 0, 0
@@ -409,9 +503,7 @@ def clean_name(raw, default=None):
 
 
 def auto_name(ts=None):
-    when = (datetime.datetime.now(datetime.timezone.utc) if ts is None
-            else datetime.datetime.fromtimestamp(ts, datetime.timezone.utc))
-    return "Site Visit " + when.strftime("%Y-%m-%d %H:%M")
+    return "Site Visit " + _local(ts).strftime("%Y-%m-%d %H:%M")
 
 
 def make_project(name, created=None, idx=None):
@@ -537,18 +629,10 @@ def api_visit():
 def api_item_create():
     with _lock:
         data = load()
-        item = {
-            "item_id": next_item_id(data),
-            "include": True,
-            "description": "",
-            "importance": "Info",
-            "tags": [],
-            "location": None,
-            "audio": None,
-            "audio_clips": [],
-            "created": _now(),
-            "photos": [],
-        }
+        item = {"item_id": next_item_id(data), "created": _now(), "photos": []}
+        # an item is a numbering group; it opens with one entry waiting for
+        # an image, so a note can be recorded before the picture is taken
+        item["photos"].append(new_entry(item))
         data["items"].append(item)
         os.makedirs(item_dir(item["item_id"]), exist_ok=True)
         save(data)
@@ -574,36 +658,29 @@ def _clean_location(value):
     return {"plan_id": str(value.get("plan_id") or ""), "page": page, "x": x, "y": y}
 
 
+def _clean_tags(value):
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ApiError("tags must be a list of strings")
+    return [str(t).strip() for t in value if str(t).strip()]
+
+
+def _clean_importance(value):
+    if value not in IMPORTANCE:
+        raise ApiError(f"importance must be one of {', '.join(IMPORTANCE)}")
+    return value
+
+
 @app.route("/api/item/<item_id>", methods=["PATCH"])
 @require_pin
 @require_project
 def api_item_patch(item_id):
-    body = request.get_json(silent=True) or {}
+    # every editable field moved onto the entries; the route stays so the
+    # frontend can still read an item back by id
     with _lock:
         data = load()
-        item = need_item(data, item_id)
-
-        if "description" in body:
-            item["description"] = "" if body["description"] is None else str(body["description"])
-        if "importance" in body:
-            imp = body["importance"]
-            if imp not in IMPORTANCE:
-                raise ApiError(f"importance must be one of {', '.join(IMPORTANCE)}")
-            item["importance"] = imp
-        if "tags" in body:
-            tags = body["tags"]
-            if tags is None:
-                tags = []
-            if not isinstance(tags, list):
-                raise ApiError("tags must be a list of strings")
-            item["tags"] = [str(t).strip() for t in tags if str(t).strip()]
-        if "include" in body:
-            item["include"] = bool(body["include"])
-        if "location" in body:
-            item["location"] = _clean_location(body["location"])
-
-        save(data)
-        return jsonify(item)
+        return jsonify(need_item(data, item_id))
 
 
 @app.route("/api/item/<item_id>", methods=["DELETE"])
@@ -621,33 +698,86 @@ def api_item_delete(item_id):
 
 # ---------------------------------------------------------------- photos
 
+def _inherit_mode():
+    """`inherit` off a JSON body, a form field or the query string."""
+    body = request.get_json(silent=True)
+    raw = (body or {}).get("inherit") if isinstance(body, dict) else None
+    if raw is None:
+        raw = request.values.get("inherit")
+    if raw is None:
+        return None
+    mode = str(raw).strip().lower()
+    if mode not in INHERIT_MODES:
+        raise ApiError(f"inherit must be one of {', '.join(INHERIT_MODES)}")
+    return mode
+
+
+def _seed_from_previous(item, mode):
+    """Fields a new entry starts with. "new" and "clear" are synonyms."""
+    if mode != "keep":
+        return {}
+    prev = sorted_entries(item)
+    if not prev:
+        return {}
+    last = prev[-1]
+    # the observation carries over; the photo and the recordings do not
+    return {"description": last.get("description") or "",
+            "importance": last.get("importance") or "Info",
+            "tags": last.get("tags") or [],
+            "location": last.get("location")}
+
+
+def _attach_photo(entry, f, item_id, pid):
+    safe = secure_filename(f.filename) or "photo.jpg"
+    filename = f"{entry['photo_id']}_{safe}"
+    d = item_dir(item_id, pid)
+    os.makedirs(d, exist_ok=True)
+    old = entry.get("filename")
+    f.save(os.path.join(d, filename))
+    if old and old != filename:
+        try:
+            os.remove(os.path.join(d, old))
+        except OSError:
+            pass
+    entry["filename"] = filename
+    entry["url"] = f"/uploads/{pid}/{item_id}/{filename}"
+
+
 @app.route("/api/item/<item_id>/photo", methods=["POST"])
 @require_pin
 @require_project
 def api_photo_add(item_id):
     f = request.files.get("photo")
-    if not f or not f.filename:
+    mode = _inherit_mode()
+    if (not f or not f.filename) and mode is None:
         raise ApiError("no photo uploaded")
     pid = current_pid()
+    # The caller may name the entry the image belongs to. Without it an upload
+    # would land on the oldest imageless entry, which is the wrong one as soon
+    # as a Keep/Clear entry is waiting ahead of it.
+    target_id = (request.form.get("photo_id")
+                 or (request.get_json(silent=True) or {}).get("photo_id")
+                 or request.args.get("photo_id"))
     with _lock:
         data = load()
         item = need_item(data, item_id)
-        photo_id = next_photo_id(item)
-        safe = secure_filename(f.filename) or "photo.jpg"
-        filename = f"{photo_id}_{safe}"
-        d = item_dir(item_id, pid)
-        os.makedirs(d, exist_ok=True)
-        f.save(os.path.join(d, filename))
-        photo = {
-            "photo_id": photo_id,
-            "filename": filename,
-            "url": f"/uploads/{pid}/{item_id}/{filename}",
-            "caption": "",
-            "created": _now(),
-        }
-        item.setdefault("photos", []).append(photo)
+        entry = None
+        if f and f.filename:
+            if target_id:
+                entry = need_photo(item, target_id)
+                if entry.get("filename"):
+                    raise ApiError(f"{target_id} already has an image")
+            else:
+                # newest imageless entry, not the oldest
+                entry = next((e for e in reversed(sorted_entries(item))
+                              if not e.get("filename")), None)
+        if entry is None:
+            entry = new_entry(item, **_seed_from_previous(item, mode))
+            item.setdefault("photos", []).append(entry)
+        if f and f.filename:
+            _attach_photo(entry, f, item_id, pid)
         save(data)
-        return jsonify(photo)
+        return jsonify(entry)
 
 
 @app.route("/api/item/<item_id>/photo/<photo_id>", methods=["PATCH"])
@@ -658,11 +788,22 @@ def api_photo_patch(item_id, photo_id):
     with _lock:
         data = load()
         item = need_item(data, item_id)
-        photo = need_photo(item, photo_id)
+        entry = need_photo(item, photo_id)
         if "caption" in body:
-            photo["caption"] = "" if body["caption"] is None else str(body["caption"])
+            entry["caption"] = "" if body["caption"] is None else str(body["caption"])
+        if "description" in body:
+            entry["description"] = ("" if body["description"] is None
+                                    else str(body["description"]))
+        if "importance" in body:
+            entry["importance"] = _clean_importance(body["importance"])
+        if "tags" in body:
+            entry["tags"] = _clean_tags(body["tags"])
+        if "include" in body:
+            entry["include"] = bool(body["include"])
+        if "location" in body:
+            entry["location"] = _clean_location(body["location"])
         save(data)
-        return jsonify(photo)
+        return jsonify(entry)
 
 
 @app.route("/api/item/<item_id>/photo/<photo_id>", methods=["DELETE"])
@@ -672,12 +813,15 @@ def api_photo_delete(item_id, photo_id):
     with _lock:
         data = load()
         item = need_item(data, item_id)
-        photo = need_photo(item, photo_id)
-        try:
-            os.remove(os.path.join(item_dir(item_id), photo["filename"]))
-        except OSError:
-            pass  # record removal is what matters; a missing file is not an error
-        item["photos"].remove(photo)
+        entry = need_photo(item, photo_id)
+        d = item_dir(item_id)
+        for name in entry_files(entry):
+            try:
+                os.remove(os.path.join(d, name))
+            except OSError:
+                pass  # record removal is what matters; a missing file is not an error
+        # an item left with no entries stays: its number is still taken
+        item["photos"].remove(entry)
         save(data)
         return jsonify(ok=True)
 
@@ -709,10 +853,17 @@ def transcribe(path):
         return ""
 
 
-@app.route("/api/item/<item_id>/audio", methods=["POST"])
+def next_clip_seq(entry):
+    n = 0
+    for c in entry.get("audio_clips") or []:
+        n = max(n, _trailing_num(c.get("clip_id")))
+    return n + 1
+
+
+@app.route("/api/item/<item_id>/photo/<photo_id>/audio", methods=["POST"])
 @require_pin
 @require_project
-def api_audio(item_id):
+def api_audio(item_id, photo_id):
     f = request.files.get("audio")
     if not f or not f.filename:
         raise ApiError("no audio uploaded")
@@ -723,12 +874,11 @@ def api_audio(item_id):
 
     with _lock:
         data = load(pid)
-        item = need_item(data, item_id)
+        entry = need_photo(need_item(data, item_id), photo_id)
         safe = secure_filename(f.filename) or "audio.webm"
-        # keep every recording: <item>_audio_01_<name>
-        existing = item.get("audio_clips") or []
-        seq = f"{len(existing) + 1:02d}"
-        filename = f"{item_id}_audio_{seq}_{safe}"
+        # keep every recording: <photo_id>_A01_<name>
+        clip_id = f"{entry['photo_id']}_A{next_clip_seq(entry):02d}"
+        filename = f"{clip_id}_{safe}"
         d = item_dir(item_id, pid)
         os.makedirs(d, exist_ok=True)
         path = os.path.join(d, filename)
@@ -740,33 +890,31 @@ def api_audio(item_id):
 
     with _lock:
         data = load(pid)
-        item = need_item(data, item_id)
+        entry = need_photo(need_item(data, item_id), photo_id)
         clip = {
-            "clip_id": f"{item_id}-A-{seq}",
+            "clip_id": clip_id,
             "filename": filename,
             "url": f"/uploads/{pid}/{item_id}/{filename}",
             "bytes": size,
             "transcript": transcript,
             "created": _now(),
         }
-        item.setdefault("audio_clips", []).append(clip)
-        # keep the legacy single-audio field pointing at the most recent clip
-        item["audio"] = {"filename": filename, "transcript": transcript}
-        if transcript and not (item.get("description") or "").strip():
-            item["description"] = transcript
+        entry.setdefault("audio_clips", []).append(clip)
+        if transcript and not (entry.get("description") or "").strip():
+            entry["description"] = transcript
         save(data, pid)
         return jsonify(clip=clip, transcript=transcript,
-                       description=item.get("description", ""))
+                       description=entry.get("description", ""))
 
 
-@app.route("/api/item/<item_id>/audio/<clip_id>", methods=["DELETE"])
+@app.route("/api/item/<item_id>/photo/<photo_id>/audio/<clip_id>", methods=["DELETE"])
 @require_pin
 @require_project
-def api_audio_delete(item_id, clip_id):
+def api_audio_delete(item_id, photo_id, clip_id):
     with _lock:
         data = load()
-        item = need_item(data, item_id)
-        clips = item.get("audio_clips") or []
+        entry = need_photo(need_item(data, item_id), photo_id)
+        clips = entry.get("audio_clips") or []
         hit = next((c for c in clips if c["clip_id"] == clip_id), None)
         if hit is None:
             raise ApiError(f"no such clip: {clip_id}", 404)
@@ -775,8 +923,6 @@ def api_audio_delete(item_id, clip_id):
             os.remove(os.path.join(item_dir(item_id), hit["filename"]))
         except OSError:
             pass
-        item["audio"] = ({"filename": clips[-1]["filename"],
-                          "transcript": clips[-1]["transcript"]} if clips else None)
         save(data)
         return jsonify(ok=True)
 
@@ -954,27 +1100,34 @@ def _strip_body(doc):
 
 
 def _write_report(doc, data, pid, *, title, heading, body, caption, Inches):
-    """The report itself: same content and ordering for either export path."""
-    items = [it for it in sorted_items(data) if it.get("include", True)]
+    """The report itself: same content and ordering for either export path.
+
+    One section per included entry, in item then seq order — the entry is the
+    observation, and an entry with no image still has something to report.
+    """
     plan_names = {p["plan_id"]: p.get("name", p["plan_id"]) for p in data["plans"]}
 
     title("Site Visit Report")
-    body(datetime.date.today().strftime("%B %d, %Y"))
+    body(_local().strftime("%B %d, %Y at %-I:%M %p %Z"))
 
-    for it in items:
-        heading(f"{it['item_id']} — {it.get('importance', 'Info')}")
-        if (it.get("description") or "").strip():
-            body(it["description"])
-        tags = it.get("tags") or []
-        if tags:
-            body("Tags: " + ", ".join(tags))
-        loc = it.get("location")
-        if loc:
-            name = plan_names.get(loc.get("plan_id"), loc.get("plan_id") or "unknown")
-            body(f"Plan {name}, page {loc.get('page', 1)} "
-                 f"(x={float(loc.get('x', 0)):.2f}, y={float(loc.get('y', 0)):.2f})")
-        for ph in it.get("photos", []):
-            path = os.path.join(item_dir(it["item_id"], pid), ph["filename"])
+    for it in sorted_items(data):
+        for e in sorted_entries(it):
+            if not e.get("include", True):
+                continue
+            heading(f"{e['photo_id']} — {e.get('importance', 'Info')}")
+            if (e.get("description") or "").strip():
+                body(e["description"])
+            tags = e.get("tags") or []
+            if tags:
+                body("Tags: " + ", ".join(tags))
+            loc = e.get("location")
+            if loc:
+                name = plan_names.get(loc.get("plan_id"), loc.get("plan_id") or "unknown")
+                body(f"Plan {name}, page {loc.get('page', 1)} "
+                     f"(x={float(loc.get('x', 0)):.2f}, y={float(loc.get('y', 0)):.2f})")
+            if not e.get("filename"):
+                continue
+            path = os.path.join(item_dir(it["item_id"], pid), e["filename"])
             if not os.path.exists(path):
                 continue
             try:
@@ -982,8 +1135,8 @@ def _write_report(doc, data, pid, *, title, heading, body, caption, Inches):
             except Exception as exc:
                 print(f"[sitescribe] could not embed {path}: {exc!r}", file=sys.stderr)
                 continue
-            if (ph.get("caption") or "").strip():
-                caption(ph["caption"])
+            if (e.get("caption") or "").strip():
+                caption(e["caption"])
 
 
 def _italic_caption(doc, text, Pt):
@@ -1140,6 +1293,157 @@ def handle_any(exc):
 
 
 # ---------------------------------------------------------------- migration
+
+# the old ids: item "I-003", photo "I-003-P-02", audio file "I-003_audio_01_x"
+_OLD_PREFIX_RE = re.compile(r"^I-\d+(?:-P-\d+)?(?:_audio_\d+)?_")
+
+
+def needs_upgrade(data):
+    """True while any item still carries the pre-entry shape.
+
+    Detected by an `I-` item id, or by a photo record missing `description`
+    — the field that moved down from the item onto the entry.
+    """
+    for it in data.get("items") or []:
+        if "I-" in str(it.get("item_id", "")):
+            return True
+        photos = [p for p in (it.get("photos") or []) if isinstance(p, dict)]
+        if photos and "description" not in photos[0]:
+            return True
+    return False
+
+
+def _upgrade_item_dir(pid, old_id, new_id):
+    """Move uploads/<pid>/I-003 to uploads/<pid>/003.
+
+    Returns (directory name that actually holds the files, its path or None).
+    """
+    if not pid:
+        return old_id, None
+    old_dir = os.path.join(project_uploads(pid), secure_filename(old_id))
+    new_dir = os.path.join(project_uploads(pid), secure_filename(new_id))
+    if old_id == new_id or not os.path.isdir(old_dir):
+        return new_id, new_dir
+    try:
+        if os.path.isdir(new_dir):  # a half-finished earlier attempt
+            for entry in os.listdir(old_dir):
+                shutil.move(os.path.join(old_dir, entry), os.path.join(new_dir, entry))
+            os.rmdir(old_dir)
+        else:
+            os.replace(old_dir, new_dir)
+    except OSError as exc:
+        print(f"[sitescribe] could not move {old_dir} -> {new_dir} ({exc!r}); "
+              "leaving the files where they are", file=sys.stderr)
+        return old_id, old_dir
+    return new_id, new_dir
+
+
+def _reprefix(d, name, prefix):
+    """Re-prefix one stored upload. Keeps the old name if the rename fails —
+    a record pointing at a real file beats a record with a tidy id."""
+    if not name or d is None or name.startswith(prefix + "_"):
+        return name
+    tail = _OLD_PREFIX_RE.sub("", name)
+    new = f"{prefix}_{tail}" if tail else prefix
+    src, dst = os.path.join(d, name), os.path.join(d, new)
+    if not os.path.exists(src):
+        # this runs on every load until a save persists the new shape, so the
+        # rename may already be done; otherwise the file is simply gone
+        return new if os.path.exists(dst) else name
+    try:
+        os.replace(src, dst)
+    except OSError as exc:
+        print(f"[sitescribe] could not rename {name} to {new} in {d} ({exc!r}); "
+              "keeping the old filename", file=sys.stderr)
+        return name
+    return new
+
+
+def upgrade_items(data, pid):
+    """Move the observation down from each item onto its photo entries.
+
+    The item's one description described all of its photos, so every entry
+    inherits it; the ids lose their `I-`/`-P-` prefixes and the files on disk
+    are re-prefixed to match. Memory only — the next save() persists it.
+    """
+    for it in data["items"]:
+        old_id = str(it.get("item_id", ""))
+        new_id = f"{_trailing_num(old_id):03d}"
+        it["item_id"] = new_id
+        created = it.get("created") or _now()
+        it["created"] = created
+        dir_name, d = _upgrade_item_dir(pid, old_id, new_id)
+
+        shared = {
+            "include": bool(it.pop("include", True)),
+            "description": it.pop("description", "") or "",
+            "importance": it.pop("importance", "Info") or "Info",
+            "tags": [str(t) for t in (it.pop("tags", None) or [])],
+            "location": it.pop("location", None),
+        }
+        clips = [c for c in (it.pop("audio_clips", None) or []) if isinstance(c, dict)]
+        it.pop("audio", None)  # the legacy single-clip pointer is gone
+
+        entries, used = [], set()
+        for n, p in enumerate([q for q in (it.get("photos") or [])
+                               if isinstance(q, dict)], 1):
+            seq = _trailing_num(str(p.get("photo_id", "")).split("-")[-1]) or n
+            if seq in used:
+                seq = max(used, default=0) + 1
+            used.add(seq)
+            photo_id = f"{new_id}_{seq:02d}"
+            fname = _reprefix(d, p.get("filename"), photo_id)
+            entries.append(_upgraded_entry(
+                photo_id, seq, shared, pid, dir_name, fname,
+                caption=p.get("caption") or "", url=p.get("url"),
+                created=p.get("created") or created))
+
+        if not entries:  # an item with no photos still held an observation
+            entries.append(_upgraded_entry(f"{new_id}_01", 1, shared, pid,
+                                           dir_name, None, created=created))
+
+        # A clip file can only carry one name. Giving every entry a record that
+        # points at the same file leaves dangling records as soon as one is
+        # deleted, so the clips attach to the first entry only.
+        first = entries[0]
+        first["audio_clips"] = [
+            {"clip_id": f"{first['photo_id']}_A{n:02d}",
+             "filename": _reprefix(d, c.get("filename"),
+                                   f"{first['photo_id']}_A{n:02d}"),
+             "url": None,
+             "bytes": int(c.get("bytes") or 0),
+             "transcript": c.get("transcript") or "",
+             "created": c.get("created") or first["created"]}
+            for n, c in enumerate(clips, 1)]
+        for clip in first["audio_clips"]:
+            clip["url"] = (f"/uploads/{pid}/{dir_name}/{clip['filename']}"
+                           if pid and clip["filename"] else None)
+        for e in entries[1:]:
+            e["audio_clips"] = []
+
+        it["photos"] = entries
+    return data
+
+
+def _upgraded_entry(photo_id, seq, shared, pid, dir_name, fname, *, caption="",
+                    url=None, created=None):
+    loc = shared["location"]
+    return {
+        "photo_id": photo_id,
+        "seq": seq,
+        "filename": fname,
+        "url": (f"/uploads/{pid}/{dir_name}/{fname}" if (pid and fname)
+                else (url if fname else None)),
+        "caption": caption,
+        "include": shared["include"],
+        "description": shared["description"],
+        "importance": shared["importance"],
+        "tags": list(shared["tags"]),
+        "location": dict(loc) if isinstance(loc, dict) else None,
+        "audio_clips": [],
+        "created": created or _now(),
+    }
+
 
 def migrate_legacy():
     """Fold a pre-projects single visit into its own project. Idempotent."""

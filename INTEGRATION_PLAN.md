@@ -41,7 +41,7 @@ The fallback is whatever the Flask app does today (inline Whisper call, plain py
 | --- | --- | --- | --- |
 | `POST /api/plan` | saves PDF, counts pages with pypdf, frontend renders with PDF.js | also `plans.load_plan_set(pdf, out_dir)` → one `PlanSheet` per page with a PNG; serve PNGs so the frontend can show sheet images and the report can use them. PDF.js stays as fallback. | `plans.py` |
 | `POST /api/item/<id>/photo` | saves file | also `photos.read_photo_metadata(path)` → `taken_at`, `gps`; if no location yet, `locate.gps_to_pin(gps, sheet)` | `photos.py`, `locate.py` |
-| `POST /api/item/<id>/audio` | inline Whisper HTTP call | `voice.transcribe(path)`; if no location yet, `voice.location_from_speech(text, sheets)`; fallback = today's inline call | `voice.py` |
+| `POST /api/item/<id>/photo/<pid>/audio` | inline Whisper HTTP call, `transcribe` flag | `voice.transcribe(path)`; if no location yet, `voice.location_from_speech(text, sheets)`; fallback = today's inline call | `voice.py` |
 | `GET /api/export/docx` | builds a plain docx inline | `bridge.to_project()` → `photos.embed_observation` per photo → `word_report.build_report(project, out)`; fallback = today's inline docx | `word_report.py`, `photos.py` |
 | `GET /api/export/plans` (new) | – | `plan_markup.export_marked_plans(project, out_pdf)` | `plan_markup.py` |
 | `POST /api/draft` (new) | – | `ai_writer.clean_up_description` per item, `ai_writer.suggest_action_item` for Major/Critical/Safety, `ai_writer.draft_summary(project)`; result stored in `visit.json` and shown before export | `ai_writer.py` |
@@ -49,15 +49,20 @@ The fallback is whatever the Flask app does today (inline Whisper call, plain py
 
 ## Data model mapping (`bridge.py`)
 
+> **Updated after #27.** The incident is now the **photo entry**, not the item.
+> An item (`001`) is a numbering group; each entry (`001_02`) carries its own
+> description, location, importance, tags, include and audio clips, and maps
+> 1:1 to an `Observation`. `bridge.to_project()` iterates entries, not items.
+
 | Flask JSON | `models.py` |
 | --- | --- |
-| `item_id` `I-003` | `Observation.number = 3`, `Observation.id` |
-| `photos[]` (`photo_id`, `filename`, `caption`) | `Observation.photos` (list of `Path`); `photo_path = photos[0]` |
+| entry `photo_id` `003_02` | `Observation.id`; `Observation.number` is the item int (`3`) — the entry seq is the sub-index |
+| entry `filename` (one image, may be `None`) | `Observation.photo_path`; `photos` is a 1-or-0 element list |
 | `importance` | `Observation.severity` (`Severity`) |
-| `description`, `tags` | same |
-| `location {plan_id, page, x, y}` | `PlanPin(sheet_id, x, y)` where the sheet is `(plan_id, page)` |
-| `audio {filename, transcript}` | `Observation.audio_path` |
-| `include` | **new** `Observation.include: bool = True` |
+| entry `description`, `tags`, `importance` | same (all per entry) |
+| entry `location {plan_id, page, x, y}` | `PlanPin(sheet_id, x, y)` — **x and y are normalized 0.0–1.0 fractions of the sheet, not pixels** |
+| entry `audio_clips[]` | `Observation.audio_path = clips[0]` if any; the rest need a list field or are dropped |
+| entry `include` | `Observation.include` (#26) — now **per photo entry**, so one item can have some photos in the report and some out |
 | photo `caption` | **new** `Observation.captions: dict[str, str]` keyed by photo filename |
 | `plans[]` (`plan_id`, `file`, `pages`) | one `PlanSheet` per page: `source_pdf`, `page_index`, `image_path` (from `plans.py`) |
 | – | `Project.name / site_address / engineer / summary / report_options` come from a small **new** `POST /api/visit` settings form (project name, address, engineer, Word template upload) |
