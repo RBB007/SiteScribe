@@ -8,7 +8,14 @@ sketch: an Item navigator over a photo, a Photo navigator under it.
 > here so the UI behaviour, the data model and the Word export are visible and
 > reusable. Take the parts that help.
 
-## Run
+## Live
+
+**https://planning-matrix-bacteria-occupation.trycloudflare.com** (PIN: ask the team)
+
+Merges to the tracked branch deploy themselves within 2 minutes — see
+[DEPLOY.md](../DEPLOY.md). You do not need server access to change it.
+
+## Run locally
 
 ```bash
 pip install -r requirements.txt
