@@ -1,4 +1,4 @@
-"""End to end through the Flask test client: capture two items, export the
+"""End to end through the Flask test client: capture entries, export the
 bundle, and check the zip holds the report, tagged photos and pinned plans."""
 
 import io
@@ -43,16 +43,21 @@ def _plan_pdf():
     return io.BytesIO(doc.tobytes())
 
 
-def _item(client, **details):
+def _item(client):
+    """A new item; returns (item_id, id of the entry waiting for its image)."""
     item = client.post("/api/item").get_json()
-    assert client.patch(f"/api/item/{item['item_id']}", json=details).status_code == 200
-    return item["item_id"]
+    return item["item_id"], item["photos"][0]["photo_id"]
 
 
-def _photo(client, item_id, name, color):
-    r = client.post(f"/api/item/{item_id}/photo",
-                    data={"photo": (_jpeg(color), name)}, content_type="multipart/form-data")
-    assert r.status_code == 200
+def _details(client, item_id, photo_id, **details):
+    r = client.patch(f"/api/item/{item_id}/photo/{photo_id}", json=details)
+    assert r.status_code == 200, r.get_data(as_text=True)
+
+
+def _photo(client, item_id, name, color, **form):
+    r = client.post(f"/api/item/{item_id}/photo", content_type="multipart/form-data",
+                    data={"photo": (_jpeg(color), name), **form})
+    assert r.status_code == 200, r.get_data(as_text=True)
     return r.get_json()
 
 
@@ -68,15 +73,33 @@ def _record(zf, name):
     return json.loads(UserComment.load(exif["Exif"][piexif.ExifIFD.UserComment]))
 
 
+def _pin_color(zf, name, x, y):
+    with Image.open(zf.open(name)) as image:
+        w, h = image.size
+        # halfway out from the centre: inside the pin, clear of the number and the white rim
+        offset = round(min(w, h) * 0.018) * 2 // 3
+        return image.convert("RGB").getpixel((round(x * w), round(y * h) + offset))
+
+
 def test_bundle_has_report_tagged_photos_and_pinned_plans(client):
     plan = client.post("/api/plan", data={"plan": (_plan_pdf(), "Framing plans.pdf")},
                        content_type="multipart/form-data").get_json()
-    beam = _item(client, description="Cracked beam at C-4", importance="Major", tags=["Crack"],
-                 location={"plan_id": plan["plan_id"], "page": 2, "x": 0.5, "y": 0.5})
-    p1 = _photo(client, beam, "IMG_1.jpg", "red")
-    p2 = _photo(client, beam, "IMG_2.jpg", "blue")
-    client.patch(f"/api/item/{beam}/photo/{p2['photo_id']}", json={"caption": "Close-up"})
-    left_out = _item(client, description="Duplicate", include=False)
+    on_page2 = {"plan_id": plan["plan_id"], "page": 2, "x": 0.5, "y": 0.5}
+
+    beam, first_id = _item(client)
+    _details(client, beam, first_id, description="Cracked beam at C-4", importance="Major",
+             tags=["Crack"], location=on_page2)
+    first = _photo(client, beam, "IMG_1.jpg", "red")
+    # Keep: a second view of the same defect, same details and spot
+    second = _photo(client, beam, "IMG_2.jpg", "blue", inherit="keep")
+    _details(client, beam, second["photo_id"], caption="Close-up")
+    # Clear: a different incident in the same item, pinned but no image yet
+    waiting = client.post(f"/api/item/{beam}/photo", json={"inherit": "clear"}).get_json()
+    _details(client, beam, waiting["photo_id"], description="Rust at base plate",
+             importance="Safety", location={"plan_id": plan["plan_id"], "page": 1, "x": 0.25, "y": 0.5})
+
+    left_out, left_out_id = _item(client)
+    _details(client, left_out, left_out_id, description="Duplicate", include=False)
     _photo(client, left_out, "IMG_3.jpg", "green")
 
     r, zf = _export(client)
@@ -85,33 +108,34 @@ def test_bundle_has_report_tagged_photos_and_pinned_plans(client):
     folder = "Elm St _ Level 2"
     assert sorted(zf.namelist()) == sorted([
         f"{folder}/site_visit_report.docx",
-        f"{folder}/photos/{p1['filename']}",
-        f"{folder}/photos/{p2['filename']}",
-        f"{folder}/plans/Framing plans_page2.png",   # page 1 has no pin, so it is left out
+        f"{folder}/photos/{first['filename']}",
+        f"{folder}/photos/{second['filename']}",
+        f"{folder}/plans/Framing plans_page1.png",
+        f"{folder}/plans/Framing plans_page2.png",
     ])
 
-    first = _record(zf, f"{folder}/photos/{p1['filename']}")
-    assert first["number"] == 1
-    assert first["severity"] == "Major"
-    assert first["tags"] == ["Crack"]
-    assert first["description"] == "Cracked beam at C-4"
-    assert first["pin"]["x"] == 0.5
-    second = _record(zf, f"{folder}/photos/{p2['filename']}")
-    assert second["description"] == "Cracked beam at C-4 — Close-up"
+    record = _record(zf, f"{folder}/photos/{first['filename']}")
+    assert record["number"] == 1
+    assert record["id"] == first["photo_id"]
+    assert record["severity"] == "Major"
+    assert record["tags"] == ["Crack"]
+    assert record["description"] == "Cracked beam at C-4"
+    assert record["pin"]["x"] == 0.5
+    kept = _record(zf, f"{folder}/photos/{second['filename']}")
+    assert kept["severity"] == "Major"
+    assert kept["description"] == "Cracked beam at C-4 — Close-up"
     # each photo keeps its own pixels
-    with Image.open(zf.open(f"{folder}/photos/{p2['filename']}")) as image:
-        r_, g_, b_ = image.convert("RGB").getpixel((32, 24))
-        assert b_ > 200 and r_ < 60
+    with Image.open(zf.open(f"{folder}/photos/{second['filename']}")) as image:
+        red, _, blue = image.convert("RGB").getpixel((32, 24))
+        assert blue > 200 and red < 60
 
-    with Image.open(zf.open(f"{folder}/plans/Framing plans_page2.png")) as image:
-        w, h = image.size
-        # halfway out from the centre: inside the pin, clear of the number and the white rim
-        r_, g_, b_ = image.convert("RGB").getpixel((w // 2, h // 2 + round(min(w, h) * 0.018) * 2 // 3))
-        assert (r_, g_, b_) == (0xF2, 0x99, 0x4A)   # Major = orange pin
+    assert _pin_color(zf, f"{folder}/plans/Framing plans_page2.png", 0.5, 0.5) == (0xF2, 0x99, 0x4A)
+    assert _pin_color(zf, f"{folder}/plans/Framing plans_page1.png", 0.25, 0.5) == (0x9B, 0x51, 0xE0)
 
 
 def test_bundle_without_plans_or_photos_still_has_report(client):
-    _item(client, description="Note only")
+    item_id, photo_id = _item(client)
+    _details(client, item_id, photo_id, description="Note only")
 
     _, zf = _export(client)
 
@@ -119,7 +143,8 @@ def test_bundle_without_plans_or_photos_still_has_report(client):
 
 
 def test_docx_export_unchanged(client):
-    _item(client, description="Note only")
+    item_id, photo_id = _item(client)
+    _details(client, item_id, photo_id, description="Note only")
 
     r = client.get("/api/export/docx")
 

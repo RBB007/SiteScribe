@@ -9,8 +9,9 @@ Glue between visit.json and the sitescribe modules (photos, plans,
 plan_markup). The JSON -> models mapping here is the minimum this export
 needs; bridge.py (#8) takes it over when it lands.
 
-Details are read from the photo entry first and the item second, so this
-works with item-level details today and per-photo details (#27) later.
+Each photo entry is an observation with its own details (#27); the item's
+are the fallback for records written before that. Pins are numbered by item
+(001_02 -> 1), and entries of one item at the same spot share a pin.
 """
 
 from __future__ import annotations
@@ -70,22 +71,21 @@ def build_zip(data: dict, report_docx: bytes, *, name: str, item_dir, plans_dir:
 
 
 def _entries(data: dict, item_dir):
-    """(Observation, photo path or None) for every included photo, plus one
-    photo-less entry per included item that has no photos, so its pin still
-    shows on the plans."""
+    """(Observation, photo path or None) for every included entry. An entry
+    whose image isn't taken yet (or an item with no entries) still has a pin
+    for the plans; it just has no photo to tag."""
     for item in sorted(data.get("items", []), key=lambda it: str(it.get("item_id"))):
-        item_photos = item.get("photos") or []
-        if not item_photos:
+        entries = sorted(item.get("photos") or [], key=lambda ph: ph.get("seq") or 0)
+        if not entries:
             if item.get("include", True):
                 yield _observation(item, {}, None), None
             continue
-        for ph in item_photos:
-            details = {k: ph.get(k, item.get(k)) for k in _DETAILS}
-            if details["include"] is False:
+        for ph in entries:
+            if ph.get("include", item.get("include", True)) is False:
                 continue
-            path = Path(item_dir(item["item_id"])) / ph["filename"]
-            if not path.exists():
-                continue
+            path = Path(item_dir(item["item_id"])) / ph["filename"] if ph.get("filename") else None
+            if path is not None and not path.exists():
+                path = None
             yield _observation(item, ph, path), path
 
 
