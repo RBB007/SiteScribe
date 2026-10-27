@@ -20,54 +20,49 @@ body{margin:0;background:var(--bg);color:var(--fg);
   font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
   padding:0 14px calc(90px + env(safe-area-inset-bottom))}
 .wrap{max-width:560px;margin:0 auto}
-header{display:flex;align-items:center;justify-content:space-between;gap:10px;
-  padding:16px 0 12px;border-bottom:1px solid var(--line)}
-.back{flex:0 0 auto;display:grid;place-items:center;width:38px;height:38px;
+header{display:flex;align-items:center;gap:10px;padding:14px 0 11px;
+  border-bottom:1px solid var(--line)}
+.back{flex:0 0 auto;display:grid;place-items:center;width:36px;height:36px;
   border-radius:9px;background:var(--card2);border:1px solid var(--line);
-  color:var(--fg);text-decoration:none;font-size:24px;line-height:1}
-.projName{font-weight:700;font-size:17px;letter-spacing:-.015em;
+  color:var(--fg);text-decoration:none;font-size:23px;line-height:1}
+.projName{font-weight:700;font-size:16.5px;letter-spacing:-.015em;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sub{color:var(--mut);font-size:12.5px}
+.sub{color:var(--mut);font-size:12px}
 button{font:inherit;border:0;border-radius:9px;background:var(--accent);
   color:var(--accent-fg);padding:11px 14px;font-weight:600;cursor:pointer}
 button.ghost{background:var(--card2);color:var(--fg);border:1px solid var(--line)}
 button.ghost:disabled{opacity:.35}
 button.danger{background:transparent;color:var(--bad);border:1px solid var(--line)}
+button.sm{padding:9px 10px;font-size:12.5px}
 button.wide{width:100%}
-button.sm{padding:9px 11px;font-size:13px}
-.tplBar{display:flex;align-items:center;gap:9px;background:var(--card);
-  border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin-top:10px;
-  font-size:12.5px;color:var(--mut)}
-.tplBar b{color:var(--fg);font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tplBar .x{margin-left:auto;background:transparent;border:0;color:var(--bad);
-  font-size:17px;padding:3px 7px;cursor:pointer;flex:0 0 auto}
-.nav{display:flex;align-items:center;gap:10px;margin:14px 0 0}
-.nav button{min-width:56px;font-size:20px;line-height:1;padding:12px 0;flex:0 0 auto}
+.nav{display:flex;align-items:center;gap:10px;margin-top:13px}
+.nav button{min-width:54px;font-size:19px;line-height:1;padding:12px 0;flex:0 0 auto}
 .nav .label{flex:1;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
-.nav .label small{display:block;font-weight:500;font-size:11px;color:var(--mut);
-  letter-spacing:.08em;text-transform:uppercase}
+.nav .label small{display:block;font-weight:500;font-size:10.5px;color:var(--mut);
+  letter-spacing:.09em;text-transform:uppercase}
 .nav.item button{background:var(--accent);color:var(--accent-fg)}
 .nav.photo{margin-top:8px}
 .nav.photo button{background:var(--card2);color:var(--fg);border:1px solid var(--line);
-  font-size:15px;min-width:46px;padding:8px 0}
-.nav.photo .label{font-size:13px;font-weight:600}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;
-  padding:13px;margin-top:12px}
-.card h2{margin:0 0 9px;font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;
-  color:var(--mut);font-weight:700}
+  font-size:15px;min-width:44px;padding:8px 0}
+.nav.photo .label{font-size:15px}
+.idTag{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.02em}
 .photoBox{position:relative;background:var(--card2);border:1px solid var(--line);
-  border-radius:12px;margin-top:10px;overflow:hidden;min-height:200px;
+  border-radius:12px;margin-top:10px;overflow:hidden;min-height:190px;
   display:flex;align-items:center;justify-content:center}
 .photoBox img{width:100%;display:block}
-.empty{text-align:center;padding:34px 18px;color:var(--mut)}
-.empty p{margin:0 0 12px;font-size:14px}
+.empty{text-align:center;padding:30px 16px;color:var(--mut)}
+.empty p{margin:0 0 11px;font-size:13.5px}
 input[type=file]{display:none}
 textarea,input[type=text],select{width:100%;padding:11px;border:1px solid var(--line);
   border-radius:9px;background:var(--bg);color:var(--fg);font:inherit}
-textarea{min-height:86px;resize:vertical}
-.chips{display:flex;flex-wrap:wrap;gap:7px}
-.chip{padding:8px 13px;border-radius:999px;border:1.5px solid var(--line);
-  background:var(--bg);color:var(--mut);font-size:13.5px;font-weight:600;cursor:pointer}
+textarea{min-height:82px;resize:vertical}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:13px;margin-top:11px}
+.card h2{margin:0 0 9px;font-size:11px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--mut);font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:8px 12px;border-radius:999px;border:1.5px solid var(--line);
+  background:var(--bg);color:var(--mut);font-size:13px;font-weight:600;cursor:pointer}
 .chip[aria-pressed=true]{color:#fff;border-color:transparent}
 .chip[data-v=Info][aria-pressed=true]{background:var(--info)}
 .chip[data-v=Minor][aria-pressed=true]{background:var(--minor)}
@@ -75,49 +70,53 @@ textarea{min-height:86px;resize:vertical}
 .chip[data-v=Critical][aria-pressed=true]{background:var(--critical)}
 .chip[data-v=Safety][aria-pressed=true]{background:var(--safety)}
 .inc{display:flex;align-items:center;gap:11px;background:var(--card);
-  border:1px solid var(--line);border-radius:12px;padding:12px 13px;margin-top:12px}
-.inc .t{flex:1;font-size:14px;font-weight:600}
-.inc .t small{display:block;font-weight:400;color:var(--mut);font-size:12px}
-.sw{position:relative;width:50px;height:30px;flex:0 0 auto}
+  border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-top:11px}
+.inc .t{flex:1;font-size:13.5px;font-weight:600}
+.inc .t small{display:block;font-weight:400;color:var(--mut);font-size:11.5px}
+.sw{position:relative;width:48px;height:29px;flex:0 0 auto}
 .sw input{opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
-.sw span{position:absolute;inset:0;border-radius:999px;background:var(--line);
-  transition:.15s;pointer-events:none}
-.sw span::after{content:"";position:absolute;width:24px;height:24px;border-radius:50%;
+.sw span{position:absolute;inset:0;border-radius:999px;background:var(--line);transition:.15s}
+.sw span::after{content:"";position:absolute;width:23px;height:23px;border-radius:50%;
   background:#fff;top:3px;left:3px;transition:.15s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .sw input:checked+span{background:var(--ok)}
-.sw input:checked+span::after{transform:translateX(20px)}
-.msg{font-size:12.5px;color:var(--mut);margin-top:8px;min-height:16px}
+.sw input:checked+span::after{transform:translateX(19px)}
+.msg{font-size:12px;color:var(--mut);margin-top:7px;min-height:15px}
 .msg.ok{color:var(--ok)}.msg.bad{color:var(--bad)}.msg.warn{color:var(--warn)}
-.row{display:flex;gap:9px}.row>*{flex:1}
+.row{display:flex;gap:8px}.row>*{flex:1}
 .loc{display:flex;align-items:center;gap:11px}
-.loc canvas{width:76px;height:76px;object-fit:cover;border-radius:9px;
-  border:1px solid var(--line);flex:0 0 auto;background:var(--card2)}
-.loc .d{flex:1;font-size:13px;color:var(--mut)}
+.loc canvas{width:72px;height:72px;border-radius:9px;border:1px solid var(--line);
+  flex:0 0 auto;background:var(--card2)}
+.loc .d{flex:1;font-size:12.5px;color:var(--mut)}
+.tx{display:flex;gap:9px;align-items:flex-start;margin-top:10px;
+  font-size:12px;color:var(--mut);cursor:pointer}
+.tx input{margin:2px 0 0;width:16px;height:16px;accent-color:var(--accent)}
+.clip{display:flex;align-items:center;gap:8px;background:var(--card2);
+  border:1px solid var(--line);border-radius:9px;padding:8px;margin-top:8px}
+.clip audio{flex:1;min-width:0;height:32px}
+.clip .id{font-size:10.5px;color:var(--mut);font-weight:700;flex:0 0 auto}
+.clip button{background:transparent;color:var(--bad);border:0;padding:3px 6px;font-size:16px}
+.tplBar{display:flex;align-items:center;gap:8px;background:var(--card);
+  border:1px solid var(--line);border-radius:11px;padding:9px 11px;margin-top:10px;
+  font-size:12px;color:var(--mut)}
+.tplBar b{color:var(--fg);font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tplBar .x{margin-left:auto;background:transparent;border:0;color:var(--bad);font-size:16px}
 .bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);
-  border-top:1px solid var(--line);padding:11px 14px calc(11px + env(safe-area-inset-bottom));
-  display:flex;gap:9px;z-index:40}
-.bar .wrap{display:flex;gap:9px;width:100%;max-width:560px;margin:0 auto}
+  border-top:1px solid var(--line);padding:10px 14px calc(10px + env(safe-area-inset-bottom));z-index:40}
+.bar .wrap{display:flex;gap:8px}
 dialog{border:0;border-radius:14px;padding:0;background:var(--card);color:var(--fg);
-  max-width:94vw;width:620px}
+  max-width:94vw;width:600px}
 dialog::backdrop{background:rgba(0,0,0,.65)}
 .dlgHead{display:flex;align-items:center;justify-content:space-between;gap:10px;
-  padding:13px 15px;border-bottom:1px solid var(--line)}
-.dlgHead b{font-size:15px}
-.dlgBody{padding:15px;max-height:72vh;overflow:auto}
+  padding:12px 14px;border-bottom:1px solid var(--line)}
+.dlgHead b{font-size:14.5px}
+.dlgBody{padding:14px;max-height:72vh;overflow:auto}
 #planHolder{position:relative;touch-action:manipulation}
 #planCanvas{width:100%;display:block;border:1px solid var(--line);border-radius:9px}
 .pin{position:absolute;width:26px;height:26px;margin:-26px 0 0 -13px;pointer-events:none}
-.tx{display:flex;gap:9px;align-items:flex-start;margin-top:10px;
-  font-size:12.5px;color:var(--mut);cursor:pointer}
-.tx input{margin:2px 0 0;flex:0 0 auto;width:17px;height:17px;accent-color:var(--accent)}
-.clip{display:flex;align-items:center;gap:9px;background:var(--card2);
-  border:1px solid var(--line);border-radius:9px;padding:9px;margin-top:9px}
-.clip audio{flex:1;min-width:0;height:34px}
-.clip .id{font-size:11px;color:var(--mut);font-weight:700;flex:0 0 auto}
-.clip button{background:transparent;color:var(--bad);border:0;padding:4px 7px;
-  font-size:17px;line-height:1;flex:0 0 auto}
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;
-  font-weight:700;color:#fff}
+.opt{display:block;width:100%;text-align:left;background:var(--card2);color:var(--fg);
+  border:1px solid var(--line);border-radius:11px;padding:13px;margin-bottom:9px}
+.opt b{display:block;font-size:14.5px;margin-bottom:2px}
+.opt span{font-size:12.5px;color:var(--mut);font-weight:400;line-height:1.45}
 </style>
 </head>
 <body>
@@ -129,54 +128,48 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
     <div class="projName" id="projName">&nbsp;</div>
     <div class="sub" id="visitSub">Loading…</div>
   </div>
-  <div style="display:flex;gap:7px;flex:0 0 auto">
+  <div style="display:flex;gap:6px;flex:0 0 auto">
     <button class="ghost sm" id="btnPlans">Plans</button>
     <button class="ghost sm" id="btnTemplate">Template</button>
   </div>
 </header>
 
-<!-- ITEM NAVIGATOR (bold triangles in the sketch) -->
 <div class="nav item">
   <button id="itemPrev" aria-label="Previous item">&#9664;</button>
   <div class="label" id="itemLabel"><small>Item</small>—</div>
   <button id="itemNext" aria-label="Next item">&#9654;</button>
 </div>
 
-<!-- IMAGE -->
 <div class="photoBox" id="photoBox"></div>
 
-<!-- PHOTO NAVIGATOR (thin arrows in the sketch) -->
 <div class="nav photo">
   <button id="photoPrev" aria-label="Previous photo">&#8592;</button>
-  <div class="label" id="photoLabel">No photos</div>
+  <div class="label idTag" id="photoLabel">—</div>
   <button id="photoNext" aria-label="Next photo">&#8594;</button>
 </div>
 <div class="row" style="margin-top:8px">
   <button class="ghost" id="btnAddPhoto">+ Photo</button>
-  <button class="danger" id="btnDelPhoto">Delete photo</button>
+  <button class="danger" id="btnDelPhoto">Delete</button>
 </div>
 <input type="file" accept="image/*" id="photoInput">
 <input type="file" accept="application/pdf,image/*" id="planInput">
 <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" id="tplInput">
 
-<!-- INCLUDE -->
 <div class="inc">
   <div class="t">Include in report
-    <small id="incHint">This item will appear in the Word report</small></div>
+    <small id="incHint">This incident will appear in the Word report</small></div>
   <label class="sw"><input type="checkbox" id="include" checked><span></span></label>
 </div>
 
-<!-- LOCATION -->
 <div class="card">
   <h2>Location on plan <span style="text-transform:none;letter-spacing:0">(optional)</span></h2>
   <div id="locBody"></div>
 </div>
 
-<!-- DESCRIPTION -->
 <div class="card">
   <h2>Description</h2>
-  <textarea id="desc" placeholder="Describe the observation — or record a voice note and it will be transcribed here."></textarea>
-  <div class="row" style="margin-top:9px">
+  <textarea id="desc" placeholder="Describe this incident — or dictate it."></textarea>
+  <div class="row" style="margin-top:8px">
     <button id="btnDictate">&#127908; Dictate</button>
     <button class="ghost" id="btnRec">● Record audio</button>
   </div>
@@ -186,13 +179,11 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   <div class="msg" id="recMsg"></div>
 </div>
 
-<!-- IMPORTANCE -->
 <div class="card">
   <h2>Importance</h2>
   <div class="chips" id="impChips"></div>
 </div>
 
-<!-- TAGS -->
 <div class="card">
   <h2>Tags</h2>
   <input type="text" id="tags" placeholder="comma, separated, tags">
@@ -207,14 +198,22 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   <button class="ghost" id="btnExport" style="flex:1">Export</button>
 </div></div>
 
-<dialog id="planDlg">
-  <div class="dlgHead">
-    <b>Tap the location</b>
-    <div style="display:flex;gap:8px">
-      <button class="ghost" id="planClear">Clear</button>
-      <button id="planDone">Done</button>
-    </div>
+<dialog id="addDlg">
+  <div class="dlgHead"><b>New photo in this item</b>
+    <button class="ghost sm" id="addCancel">Cancel</button></div>
+  <div class="dlgBody">
+    <button class="opt" id="optKeep"><b>Keep previous details</b>
+      <span id="keepPreview"></span></button>
+    <button class="opt" id="optClear"><b>Start blank</b>
+      <span>Empty description, Info, no location — a different incident.</span></button>
   </div>
+</dialog>
+
+<dialog id="planDlg">
+  <div class="dlgHead"><b>Tap the location</b>
+    <div style="display:flex;gap:7px">
+      <button class="ghost sm" id="planClear">Clear</button>
+      <button class="sm" id="planDone">Done</button></div></div>
   <div class="dlgBody">
     <select id="planSelect" style="margin-bottom:10px"></select>
     <div id="planHolder">
@@ -225,7 +224,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
           <circle cx="12" cy="9" r="3.4" fill="#fff"/></svg>
       </div>
     </div>
-    <div class="msg" id="planMsg">Upload a plan from “Plans”, then tap where this item is.</div>
+    <div class="msg" id="planMsg"></div>
   </div>
 </dialog>
 
@@ -236,25 +235,128 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 
 const $ = id => document.getElementById(id);
 const IMPORTANCE = ["Info","Minor","Major","Critical","Safety"];
+const esc = s => String(s).replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-let items = [], plans = [], ii = 0, pi = 0;
-let pendingLoc = null, planDoc = null, planImg = null;
+let items = [], plans = [], template = null, ii = 0, pi = 0;
+let pendingLoc = null;
 
 const item  = () => items[ii] || null;
-const photo = () => { const it = item(); return it && it.photos[pi] || null; };
+/* the incident: an item's photo entry */
+const entry = () => { const it = item(); return it && it.photos[pi] || null; };
 
 async function api(path, opts={}){
   const res = await fetch(path, opts);
-  if (res.status === 401) { location.href = "/login"; throw new Error("unauthorized"); }
-  if (res.status === 409) { location.href = "/"; throw new Error("no project open"); }
+  if (res.status === 401){ location.href = "/login"; throw new Error("unauthorized"); }
+  if (res.status === 409){ location.href = "/"; throw new Error("no project open"); }
   const ct = res.headers.get("content-type") || "";
   const body = ct.includes("json") ? await res.json() : await res.text();
   if (!res.ok) throw new Error(body?.error || res.statusText);
   return body;
 }
-const say = (t, c="") => { $('status').className = "msg " + c; $('status').textContent = t; };
+const say = (t,c="") => { $('status').className = "msg "+c; $('status').textContent = t; };
 
-/* ---------------- load ---------------- */
+/* ---------------- render ---------------- */
+function render(){
+  const it = item(), e = entry();
+  const incidents = items.reduce((n,x)=>n+x.photos.length,0);
+  const included  = items.reduce((n,x)=>n+x.photos.filter(p=>p.include).length,0);
+  $('visitSub').textContent =
+    `${items.length} item${items.length===1?"":"s"} · ${incidents} incident${incidents===1?"":"s"} · ${included} in report`;
+
+  $('itemLabel').innerHTML = it
+    ? `<small>Item</small><span class="idTag">${it.item_id}</span>
+       <span style="color:var(--mut);font-weight:500;font-size:13px">${ii+1}/${items.length}</span>`
+    : `<small>Item</small>—`;
+  $('itemPrev').disabled = ii <= 0;
+  $('itemNext').disabled = ii >= items.length - 1;
+
+  if (!it){
+    $('photoBox').innerHTML =
+      `<div class="empty"><p>No items yet.</p><button id="first">+ New item</button></div>`;
+    $('first').onclick = newItem;
+    $('photoLabel').textContent = "—";
+    $('locBody').innerHTML = ""; $('clips').innerHTML = "";
+    ['photoPrev','photoNext','btnAddPhoto','btnDelPhoto','include','desc','tags',
+     'btnDictate','btnRec'].forEach(id => $(id).disabled = true);
+    return;
+  }
+  ['photoPrev','photoNext','btnAddPhoto','btnDelPhoto','include','desc','tags',
+   'btnDictate','btnRec'].forEach(id => $(id).disabled = false);
+
+  if (!e){
+    $('photoBox').innerHTML = `<div class="empty"><p>No photo entries.</p>
+      <button id="addFirst">+ Photo</button></div>`;
+    $('addFirst').onclick = () => addEntry("clear");
+    $('photoLabel').textContent = "—";
+    return;
+  }
+
+  /* image */
+  if (e.filename){
+    $('photoBox').innerHTML = `<img src="${e.url}" alt="">`;
+  } else {
+    $('photoBox').innerHTML = `<div class="empty">
+      <p>No image on <span class="idTag">${e.photo_id}</span> yet</p>
+      <button id="shoot">Take / choose photo</button></div>`;
+    $('shoot').onclick = () => $('photoInput').click();
+  }
+
+  const n = it.photos.length;
+  $('photoLabel').innerHTML =
+    `${e.photo_id} <span style="color:var(--mut);font-weight:500;font-size:12px">${pi+1}/${n}</span>`;
+  $('photoPrev').disabled = pi <= 0;
+  $('photoNext').disabled = pi >= n - 1;
+
+  /* per-incident fields */
+  $('include').checked = e.include;
+  $('incHint').textContent = e.include
+    ? "This incident will appear in the Word report"
+    : "Excluded — will NOT appear in the report";
+  $('desc').value = e.description || "";
+  $('tags').value = (e.tags || []).join(", ");
+
+  $('impChips').innerHTML = IMPORTANCE.map(v =>
+    `<button class="chip" data-v="${v}" aria-pressed="${e.importance===v}">${v}</button>`).join("");
+  [...$('impChips').children].forEach(b => b.onclick = () => patch({importance:b.dataset.v}));
+
+  if (e.location){
+    const p = plans.find(x => x.plan_id === e.location.plan_id);
+    $('locBody').innerHTML =
+      `<div class="loc"><canvas id="locThumb" width="72" height="72"></canvas>
+       <div class="d"><b style="color:var(--fg)">${p?esc(p.name):"plan"}</b><br>
+       page ${e.location.page} · x ${e.location.x.toFixed(3)} · y ${e.location.y.toFixed(3)}</div>
+       <button class="ghost sm" id="locEdit">Change</button></div>`;
+    $('locEdit').onclick = openPlan;
+    const c = $('locThumb'), ctx = c.getContext('2d');
+    ctx.fillStyle="#8884"; ctx.fillRect(0,0,72,72);
+    ctx.fillStyle="#e5484d"; ctx.beginPath();
+    ctx.arc(e.location.x*72, e.location.y*72, 6, 0, 7); ctx.fill();
+    ctx.strokeStyle="#fff"; ctx.lineWidth=2; ctx.stroke();
+  } else {
+    $('locBody').innerHTML = `<button class="ghost wide" id="locPick">Pick location on plan</button>`;
+    $('locPick').onclick = openPlan;
+  }
+
+  renderClips();
+}
+
+function renderClips(){
+  const e = entry(), clips = (e && e.audio_clips) || [];
+  $('clips').innerHTML = clips.map(c => `
+    <div class="clip"><span class="id idTag">${c.clip_id}</span>
+      <audio controls preload="none" src="${c.url}"></audio>
+      <button data-id="${c.clip_id}" title="Delete recording">&times;</button></div>`).join("");
+  [...$('clips').querySelectorAll('button')].forEach(b => b.onclick = async () => {
+    if (!confirm(`Delete recording ${b.dataset.id}?`)) return;
+    await api(`/api/item/${item().item_id}/photo/${entry().photo_id}/audio/${b.dataset.id}`,
+              {method:"DELETE"});
+    entry().audio_clips = clips.filter(c => c.clip_id !== b.dataset.id);
+    renderClips();
+  });
+}
+
+/* ---------------- data ---------------- */
 async function load(){
   api('/api/projects').then(r => {
     const p = r.projects.find(x => x.project_id === r.current);
@@ -264,109 +366,15 @@ async function load(){
   loadTemplate();
   const d = await api('/api/visit');
   items = d.items; plans = d.plans;
-  if (ii >= items.length) ii = Math.max(0, items.length - 1);
+  if (ii >= items.length) ii = Math.max(0, items.length-1);
+  const it = item(); if (it && pi >= it.photos.length) pi = Math.max(0, it.photos.length-1);
   render();
 }
 
-/* ---------------- render ---------------- */
-function render(){
-  const it = item();
-  $('visitSub').textContent =
-    `${items.length} item${items.length===1?"":"s"} · ${items.filter(x=>x.include).length} in report`;
-
-  $('itemLabel').innerHTML = it
-    ? `<small>Item</small>${it.item_id}  <span style="color:var(--mut);font-weight:500">${ii+1}/${items.length}</span>`
-    : `<small>Item</small>—`;
-  $('itemPrev').disabled = ii <= 0;
-  $('itemNext').disabled = ii >= items.length - 1;
-
-  if (!it){
-    $('photoBox').innerHTML =
-      `<div class="empty"><p>No items yet.</p><button id="first">+ New item</button></div>`;
-    $('first').onclick = newItem;
-    $('photoLabel').textContent = "No photos";
-    $('locBody').innerHTML = "";
-    return;
-  }
-
-  /* photo */
-  const ph = photo();
-  if (ph){
-    $('photoBox').innerHTML = `<img src="${ph.url}" alt="">`;
-  } else {
-    $('photoBox').innerHTML =
-      `<div class="empty"><p>No photo for ${it.item_id}</p>
-       <button id="shoot">Take / choose photo</button></div>`;
-    $('shoot').onclick = () => $('photoInput').click();
-  }
-  const n = it.photos.length;
-  $('photoLabel').textContent = n ? `Photo ${pi+1} / ${n}` : "No photos";
-  $('photoPrev').disabled = pi <= 0;
-  $('photoNext').disabled = pi >= n - 1;
-  $('btnDelPhoto').disabled = !ph;
-
-  /* fields */
-  $('include').checked = it.include;
-  $('incHint').textContent = it.include
-    ? "This item will appear in the Word report"
-    : "Excluded — will NOT appear in the report";
-  $('desc').value = it.description || "";
-  $('tags').value = (it.tags || []).join(", ");
-
-  $('impChips').innerHTML = IMPORTANCE.map(v =>
-    `<button class="chip" data-v="${v}" aria-pressed="${it.importance===v}">${v}</button>`).join("");
-  [...$('impChips').children].forEach(b =>
-    b.onclick = () => patch({importance: b.dataset.v}));
-
-  /* location */
-  if (it.location){
-    const p = plans.find(x => x.plan_id === it.location.plan_id);
-    $('locBody').innerHTML =
-      `<div class="loc"><canvas id="locThumb" width="76" height="76"></canvas>
-       <div class="d"><b>${p ? p.name : "plan"}</b><br>page ${it.location.page} ·
-       x ${it.location.x.toFixed(3)} · y ${it.location.y.toFixed(3)}</div>
-       <button class="ghost" id="locEdit">Change</button></div>`;
-    $('locEdit').onclick = openPlan;
-    drawThumb(it.location);
-  } else {
-    $('locBody').innerHTML = `<button class="ghost wide" id="locPick">Pick location on plan</button>`;
-    $('locPick').onclick = openPlan;
-  }
-
-  /* audio clips */
-  renderClips();
-}
-
-function renderClips(){
-  const it = item();
-  const clips = (it && it.audio_clips) || [];
-  $('clips').innerHTML = clips.map(c => `
-    <div class="clip">
-      <span class="id">${c.clip_id}</span>
-      <audio controls preload="none" src="${c.url}"></audio>
-      <button data-id="${c.clip_id}" title="Delete recording">&times;</button>
-    </div>`).join("");
-  [...$('clips').querySelectorAll('button')].forEach(b => b.onclick = async () => {
-    if (!confirm(`Delete recording ${b.dataset.id}?`)) return;
-    await api(`/api/item/${item().item_id}/audio/${b.dataset.id}`, {method:"DELETE"});
-    item().audio_clips = clips.filter(c => c.clip_id !== b.dataset.id);
-    renderClips();
-  });
-}
-
-async function drawThumb(loc){
-  const c = $('locThumb'); if (!c) return;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = "#8884"; ctx.fillRect(0,0,76,76);
-  ctx.fillStyle = "#e5484d";
-  ctx.beginPath(); ctx.arc(loc.x*76, loc.y*76, 6, 0, 7); ctx.fill();
-  ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
-}
-
-/* ---------------- mutations ---------------- */
+/* patch the current incident */
 async function patch(fields){
-  const it = item(); if (!it) return;
-  Object.assign(it, await api(`/api/item/${it.item_id}`, {
+  const it = item(), e = entry(); if (!it || !e) return;
+  Object.assign(e, await api(`/api/item/${it.item_id}/photo/${e.photo_id}`, {
     method:"PATCH", headers:{"Content-Type":"application/json"},
     body: JSON.stringify(fields)}));
   render();
@@ -374,117 +382,114 @@ async function patch(fields){
 
 async function newItem(){
   const it = await api('/api/item', {method:"POST"});
-  items.push(it); ii = items.length - 1; pi = 0;
-  render(); say(`Created ${it.item_id}`, "ok");
+  items.push(it); ii = items.length-1; pi = 0;
+  render(); say(`Created item ${it.item_id}`,"ok");
+}
+
+async function addEntry(mode){
+  const it = item(); if (!it) return;
+  const fd = new FormData(); fd.append("inherit", mode);
+  const e = await api(`/api/item/${it.item_id}/photo`, {method:"POST", body:fd});
+  it.photos.push(e); pi = it.photos.length-1;
+  render();
+  say(mode==="keep" ? `${e.photo_id} — details carried over.` : `${e.photo_id} — blank entry.`, "ok");
+  $('photoInput').click();
 }
 
 $('itemPrev').onclick = () => { if (ii>0){ ii--; pi=0; render(); } };
 $('itemNext').onclick = () => { if (ii<items.length-1){ ii++; pi=0; render(); } };
 $('photoPrev').onclick = () => { if (pi>0){ pi--; render(); } };
-$('photoNext').onclick = () => { const it=item(); if (it && pi<it.photos.length-1){ pi++; render(); } };
+$('photoNext').onclick = () => { const it=item(); if (it&&pi<it.photos.length-1){ pi++; render(); } };
 $('btnNewItem').onclick = newItem;
-$('btnAddPhoto').onclick = () => { if (item()) $('photoInput').click(); else say("Create an item first","bad"); };
 
-$('photoInput').onchange = async e => {
-  const f = e.target.files[0]; if (!f || !item()) return;
-  e.target.value = "";
+$('btnAddPhoto').onclick = () => {
+  const e = entry();
+  if (!e) return addEntry("clear");
+  const bits = [];
+  if (e.description) bits.push(`“${e.description.slice(0,42)}${e.description.length>42?"…":""}”`);
+  bits.push(e.importance);
+  if (e.location) bits.push("same plan location");
+  if ((e.tags||[]).length) bits.push(e.tags.join(", "));
+  $('keepPreview').textContent = "Carries over: " + bits.join(" · ") + ". Audio is not copied.";
+  $('addDlg').showModal();
+};
+$('addCancel').onclick = () => $('addDlg').close();
+$('optKeep').onclick  = () => { $('addDlg').close(); addEntry("keep"); };
+$('optClear').onclick = () => { $('addDlg').close(); addEntry("clear"); };
+
+$('photoInput').onchange = async ev => {
+  const f = ev.target.files[0]; if (!f || !item()) return;
+  ev.target.value = "";
   const fd = new FormData(); fd.append("photo", f);
   say("Uploading photo…","warn");
-  const ph = await api(`/api/item/${item().item_id}/photo`, {method:"POST", body:fd});
-  item().photos.push(ph); pi = item().photos.length - 1;
-  render(); say(`Added ${ph.photo_id}`,"ok");
+  const e = await api(`/api/item/${item().item_id}/photo`, {method:"POST", body:fd});
+  const it = item(), at = it.photos.findIndex(p => p.photo_id === e.photo_id);
+  if (at >= 0) it.photos[at] = e; else it.photos.push(e);
+  pi = it.photos.findIndex(p => p.photo_id === e.photo_id);
+  render(); say(`Photo on ${e.photo_id}`,"ok");
 };
 
 $('btnDelPhoto').onclick = async () => {
-  const it = item(), ph = photo(); if (!ph) return;
-  if (!confirm(`Delete ${ph.photo_id}?`)) return;
-  await api(`/api/item/${it.item_id}/photo/${ph.photo_id}`, {method:"DELETE"});
+  const it = item(), e = entry(); if (!e) return;
+  if (!confirm(`Delete incident ${e.photo_id}?\nIts photo, audio and details go with it.`)) return;
+  await api(`/api/item/${it.item_id}/photo/${e.photo_id}`, {method:"DELETE"});
   it.photos.splice(pi,1); pi = Math.max(0, pi-1);
-  render(); say("Photo deleted","ok");
+  render(); say("Deleted.","ok");
 };
 
-$('include').onchange = e => patch({include: e.target.checked});
-let dT; $('desc').oninput = () => { clearTimeout(dT); dT = setTimeout(()=>patch({description:$('desc').value}), 700); };
+$('include').onchange = ev => patch({include: ev.target.checked});
+let dT; $('desc').oninput = () => { clearTimeout(dT);
+  dT = setTimeout(()=>patch({description:$('desc').value}), 700); };
 let tT; $('tags').oninput = () => { clearTimeout(tT); tT = setTimeout(()=>
   patch({tags: $('tags').value.split(",").map(s=>s.trim()).filter(Boolean)}), 700); };
 
-/* ---------------- dictation (Web Speech API: free, no key) ---------------- */
+/* ---------------- dictation ---------------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let sr = null, dictating = false, baseText = "";
-
-if (!SR) {
-  $('btnDictate').disabled = true;
-  $('btnDictate').title = "This browser has no speech recognition";
-}
+let sr=null, dictating=false, baseText="";
+if (!SR) $('btnDictate').title = "This browser has no speech recognition";
 
 $('btnDictate').onclick = () => {
-  if (!item()) return say("Create an item first", "bad");
-  if (!SR) { $('recMsg').className="msg bad";
-    $('recMsg').textContent="No browser dictation here — use the mic key on your keyboard."; return; }
-
-  if (dictating) { sr.stop(); return; }
-
-  sr = new SR();
-  sr.lang = "en-US";
-  sr.continuous = true;
-  sr.interimResults = true;
-
-  baseText = $('desc').value;
-  if (baseText && !baseText.endsWith(" ")) baseText += " ";
-
-  sr.onstart = () => {
-    dictating = true;
-    $('btnDictate').textContent = "■ Stop dictating";
-    $('recMsg').className = "msg warn";
-    $('recMsg').textContent = "Listening — speak now.";
-  };
-
-  sr.onresult = e => {
-    let finalTxt = "", interim = "";
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      const t = e.results[i][0].transcript;
-      if (e.results[i].isFinal) finalTxt += t; else interim += t;
+  if (!entry()) return say("Add a photo entry first","bad");
+  if (!SR){ $('recMsg').className="msg bad";
+    $('recMsg').textContent="No browser dictation — use the mic key on your keyboard."; return; }
+  if (dictating){ sr.stop(); return; }
+  sr = new SR(); sr.lang="en-US"; sr.continuous=true; sr.interimResults=true;
+  baseText = $('desc').value; if (baseText && !baseText.endsWith(" ")) baseText += " ";
+  sr.onstart = () => { dictating=true; $('btnDictate').textContent="■ Stop dictating";
+    $('recMsg').className="msg warn"; $('recMsg').textContent="Listening — speak now."; };
+  sr.onresult = ev => {
+    let fin="", interim="";
+    for (let i=ev.resultIndex;i<ev.results.length;i++){
+      const t = ev.results[i][0].transcript;
+      if (ev.results[i].isFinal) fin += t; else interim += t;
     }
-    if (finalTxt) baseText += finalTxt + " ";
-    // show committed text plus the live guess, but only persist the committed part
+    if (fin) baseText += fin + " ";
     $('desc').value = baseText + interim;
   };
-
-  sr.onerror = ev => {
-    $('recMsg').className = "msg bad";
-    $('recMsg').textContent =
-      ev.error === "not-allowed" ? "Microphone permission denied."
-      : ev.error === "no-speech" ? "Didn't catch anything — try again."
-      : ev.error === "network"   ? "Dictation needs a network connection."
-      : "Dictation error: " + ev.error;
-  };
-
-  sr.onend = () => {
-    dictating = false;
-    $('btnDictate').innerHTML = "&#127908; Dictate";
-    $('desc').value = baseText.trimEnd();
-    patch({description: $('desc').value});
-    if (!$('recMsg').classList.contains("bad")) {
-      $('recMsg').className = "msg ok";
-      $('recMsg').textContent = baseText.trim() ? "Dictation saved." : "Nothing captured.";
-    }
-  };
-
+  sr.onerror = ev => { $('recMsg').className="msg bad";
+    $('recMsg').textContent = ev.error==="not-allowed" ? "Microphone permission denied."
+      : ev.error==="no-speech" ? "Didn't catch anything — try again."
+      : ev.error==="network" ? "Dictation needs a network connection."
+      : "Dictation error: "+ev.error; };
+  sr.onend = () => { dictating=false; $('btnDictate').innerHTML="&#127908; Dictate";
+    $('desc').value = baseText.trimEnd(); patch({description:$('desc').value});
+    if (!$('recMsg').classList.contains("bad")){ $('recMsg').className="msg ok";
+      $('recMsg').textContent = baseText.trim() ? "Dictation saved." : "Nothing captured."; } };
   try { sr.start(); }
-  catch (err) { $('recMsg').className="msg bad"; $('recMsg').textContent = "Could not start: " + err.message; }
+  catch(err){ $('recMsg').className="msg bad"; $('recMsg').textContent="Could not start: "+err.message; }
 };
 
-/* ---------------- audio recording (optional, needs OPENAI_API_KEY to transcribe) ---------------- */
+/* ---------------- audio recording ---------------- */
 let mr, chunks=[], rec=false;
 $('btnRec').onclick = async () => {
-  if (!item()) return say("Create an item first","bad");
+  if (!entry()) return say("Add a photo entry first","bad");
   if (!rec){
-    if (!navigator.mediaDevices?.getUserMedia)
-      return $('recMsg').className="msg bad", $('recMsg').textContent="Mic needs HTTPS.";
+    if (!navigator.mediaDevices?.getUserMedia){
+      $('recMsg').className="msg bad"; $('recMsg').textContent="Mic needs HTTPS."; return; }
     try{
       const s = await navigator.mediaDevices.getUserMedia({audio:true});
       mr = new MediaRecorder(s); chunks=[];
-      mr.ondataavailable = e => chunks.push(e.data);
+      mr.ondataavailable = ev => chunks.push(ev.data);
       mr.onstop = async () => {
         s.getTracks().forEach(t=>t.stop());
         const blob = new Blob(chunks,{type:mr.mimeType});
@@ -495,33 +500,31 @@ $('btnRec').onclick = async () => {
         $('recMsg').className="msg warn";
         $('recMsg').textContent = wantText ? "Uploading and transcribing…" : "Saving recording…";
         try{
-          const r = await api(`/api/item/${item().item_id}/audio`, {method:"POST", body:fd});
-          (item().audio_clips ||= []).push(r.clip);
-          if (r.description){ item().description = r.description; $('desc').value = r.description; }
+          const r = await api(
+            `/api/item/${item().item_id}/photo/${entry().photo_id}/audio`,
+            {method:"POST", body:fd});
+          (entry().audio_clips ||= []).push(r.clip);
+          if (r.description){ entry().description = r.description; $('desc').value = r.description; }
           renderClips();
           const kb = (r.clip.bytes/1024).toFixed(0);
-          $('recMsg').className = "msg ok";
+          $('recMsg').className="msg ok";
           $('recMsg').textContent = r.transcript
-            ? `Saved ${r.clip.clip_id} (${kb} KB) and transcribed into the description.`
-            : wantText
-              ? `Saved ${r.clip.clip_id} (${kb} KB). No transcript — no API key set; use Dictate for text.`
-              : `Saved ${r.clip.clip_id} (${kb} KB). Audio kept, not transcribed.`;
+            ? `Saved ${r.clip.clip_id} (${kb} KB) and transcribed.`
+            : wantText ? `Saved ${r.clip.clip_id} (${kb} KB). No transcript — no API key; use Dictate.`
+                       : `Saved ${r.clip.clip_id} (${kb} KB). Audio kept, not transcribed.`;
         }catch(err){ $('recMsg').className="msg bad"; $('recMsg').textContent=err.message; }
       };
       mr.start(); rec=true; $('btnRec').textContent="■ Stop";
       $('recMsg').className="msg warn"; $('recMsg').textContent="Recording…";
-    }catch(err){
-      $('recMsg').className="msg bad";
-      $('recMsg').textContent = err.name==="NotAllowedError" ? "Mic permission denied." : err.name;
-    }
-  } else { mr.stop(); rec=false; $('btnRec').textContent="● Record"; }
+    }catch(err){ $('recMsg').className="msg bad";
+      $('recMsg').textContent = err.name==="NotAllowedError" ? "Mic permission denied." : err.name; }
+  } else { mr.stop(); rec=false; $('btnRec').textContent="● Record audio"; }
 };
 
 /* ---------------- plans ---------------- */
 $('btnPlans').onclick = () => $('planInput').click();
-$('planInput').onchange = async e => {
-  const f = e.target.files[0]; if (!f) return;
-  e.target.value = "";
+$('planInput').onchange = async ev => {
+  const f = ev.target.files[0]; if (!f) return; ev.target.value="";
   const fd = new FormData(); fd.append("plan", f);
   say("Uploading plan…","warn");
   const p = await api('/api/plan',{method:"POST", body:fd});
@@ -531,101 +534,89 @@ $('planInput').onchange = async e => {
 async function openPlan(){
   if (!plans.length) return say("Upload a plan first — tap “Plans”.","bad");
   $('planSelect').innerHTML = plans.map(p =>
-    `<option value="${p.plan_id}">${p.name} (${p.pages} page${p.pages===1?"":"s"})</option>`).join("");
-  const it = item();
-  pendingLoc = it.location ? {...it.location} : null;
+    `<option value="${p.plan_id}">${esc(p.name)} (${p.pages} page${p.pages===1?"":"s"})</option>`).join("");
+  const e = entry();
+  pendingLoc = e.location ? {...e.location} : null;
   if (pendingLoc) $('planSelect').value = pendingLoc.plan_id;
   $('planDlg').showModal();
   await drawPlan();
 }
-$('planSelect').onchange = () => { pendingLoc = null; $('planPin').hidden = true; drawPlan(); };
+$('planSelect').onchange = () => { pendingLoc=null; $('planPin').hidden=true; drawPlan(); };
 
 async function drawPlan(){
   const p = plans.find(x => x.plan_id === $('planSelect').value);
   const cv = $('planCanvas'), ctx = cv.getContext('2d');
   $('planMsg').textContent = "Loading plan…";
   try{
-    const url = p.url;
     if ((p.name||"").toLowerCase().endsWith(".pdf")){
-      const buf = await (await fetch(url)).arrayBuffer();
-      planDoc = await pdfjsLib.getDocument({data:buf}).promise;
-      const page = await planDoc.getPage(pendingLoc?.page || 1);
+      const buf = await (await fetch(p.url)).arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+      const page = await pdf.getPage(pendingLoc?.page || 1);
       const vp = page.getViewport({scale:2});
       cv.width = vp.width; cv.height = vp.height;
       await page.render({canvasContext:ctx, viewport:vp}).promise;
+      $('planMsg').textContent = `Page 1 of ${pdf.numPages} — tap to place the marker.`;
     } else {
       const img = new Image();
-      await new Promise((ok,no)=>{img.onload=ok;img.onerror=no;img.src=url;});
-      cv.width = img.width; cv.height = img.height; ctx.drawImage(img,0,0);
+      await new Promise((ok,no)=>{img.onload=ok;img.onerror=no;img.src=p.url;});
+      cv.width=img.width; cv.height=img.height; ctx.drawImage(img,0,0);
+      $('planMsg').textContent = "Tap to place the marker.";
     }
-    $('planMsg').textContent = "Tap to place the marker.";
     if (pendingLoc) showPin(pendingLoc.x, pendingLoc.y);
-  }catch(err){ $('planMsg').textContent = "Could not render plan: " + err.message; }
+  }catch(err){ $('planMsg').textContent = "Could not render plan: "+err.message; }
 }
+function showPin(x,y){ const p=$('planPin');
+  p.style.left=(x*100)+"%"; p.style.top=(y*100)+"%"; p.hidden=false; }
 
-function showPin(x,y){
-  const pin = $('planPin');
-  pin.style.left = (x*100)+"%"; pin.style.top = (y*100)+"%"; pin.hidden = false;
-}
-$('planCanvas').onclick = e => {
+$('planCanvas').onclick = ev => {
   const r = $('planCanvas').getBoundingClientRect();
-  // normalised 0-1: survives any screen size, zoom, or re-render
-  const x = (e.clientX-r.left)/r.width, y = (e.clientY-r.top)/r.height;
+  /* normalised 0-1: survives any screen size, zoom or re-render */
+  const x = (ev.clientX-r.left)/r.width, y = (ev.clientY-r.top)/r.height;
   pendingLoc = {plan_id:$('planSelect').value, page: pendingLoc?.page || 1, x, y};
   showPin(x,y);
   $('planMsg').textContent = `x ${x.toFixed(3)} · y ${y.toFixed(3)}`;
 };
-$('planClear').onclick = () => { pendingLoc = null; $('planPin').hidden = true;
-  $('planMsg').textContent = "Marker cleared."; };
-$('planDone').onclick = async () => { $('planDlg').close(); await patch({location: pendingLoc}); };
+$('planClear').onclick = () => { pendingLoc=null; $('planPin').hidden=true;
+  $('planMsg').textContent="Marker cleared."; };
+$('planDone').onclick = async () => { $('planDlg').close(); await patch({location:pendingLoc}); };
 
-/* ---------------- report template (formatting only) ---------------- */
-let template = null;
-
+/* ---------------- report template ---------------- */
 async function loadTemplate(){
   try{ const r = await api('/api/template'); template = r.template || null; }
   catch(e){ template = null; }
   renderTemplate();
 }
-
 function renderTemplate(){
-  if (!template){
-    $('tplBar').innerHTML = "";
-    return;
-  }
-  const n = (template.styles || []).length;
-  $('tplBar').innerHTML =
-    `<span>&#128196;</span><b>${esc(template.name)}</b>
-     <span>&middot; ${n} style${n===1?"":"s"} &middot; report will match it</span>
-     <button class="x" id="tplDel" title="Remove template">&times;</button>`;
+  if (!template){ $('tplBar').innerHTML = ""; return; }
+  const n = (template.styles||[]).length;
+  $('tplBar').innerHTML = `<span>&#128196;</span><b>${esc(template.name)}</b>
+    <span>&middot; ${n} style${n===1?"":"s"} &middot; report will match it</span>
+    <button class="x" id="tplDel" title="Remove template">&times;</button>`;
   $('tplDel').onclick = async () => {
     if (!confirm("Remove the report template?\nExports go back to the plain format.")) return;
-    await api('/api/template', {method:"DELETE"});
-    template = null; renderTemplate(); say("Template removed.","ok");
+    await api('/api/template',{method:"DELETE"});
+    template=null; renderTemplate(); say("Template removed.","ok");
   };
 }
-const esc = s => String(s).replace(/[&<>"']/g, c =>
-  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-
 $('btnTemplate').onclick = () => $('tplInput').click();
-$('tplInput').onchange = async e => {
-  const f = e.target.files[0]; if (!f) return;
-  e.target.value = "";
+$('tplInput').onchange = async ev => {
+  const f = ev.target.files[0]; if (!f) return; ev.target.value="";
   const fd = new FormData(); fd.append("template", f);
   say("Uploading template…","warn");
   try{
-    const r = await api('/api/template', {method:"POST", body:fd});
+    const r = await api('/api/template',{method:"POST", body:fd});
     template = r.template || r; renderTemplate();
     say(`Template set — the report will use “${template.name}” formatting.`,"ok");
   }catch(err){ say(err.message,"bad"); }
 };
 
 $('btnExport').onclick = () => {
-  if (!items.some(x=>x.include)) return say("No items are included in the report.","bad");
+  const any = items.some(it => it.photos.some(p => p.include));
+  if (!any) return say("No incidents are included in the report.","bad");
   location.href = "/api/export/docx";
 };
 
-load().catch(e => say(e.message, "bad"));
+load().catch(e => say(e.message,"bad"));
 </script>
 </body>
 </html>
