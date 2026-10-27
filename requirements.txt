@@ -1,0 +1,13 @@
+# App
+streamlit>=1.40
+streamlit-image-coordinates>=0.1.9
+pillow>=10.0
+
+# Add what your module needs below, with a comment saying which module.
+# plans.py / plan_markup.py:  pymupdf
+# photos.py:                  piexif
+# voice.py:                   openai
+# ai_writer.py:               anthropic
+# word_report.py:             python-docx
+
+pytest
