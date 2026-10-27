@@ -41,6 +41,8 @@ button.wide{width:100%}
 .nav .label small{display:block;font-weight:500;font-size:10.5px;color:var(--mut);
   letter-spacing:.09em;text-transform:uppercase}
 .nav.item button{background:var(--accent);color:var(--accent-fg)}
+.nav.item button.itemDel{background:transparent;color:var(--bad);
+  border:1px solid var(--line);min-width:46px;font-size:16px}
 .nav.photo{margin-top:8px}
 .nav.photo button{background:var(--card2);color:var(--fg);border:1px solid var(--line);
   font-size:15px;min-width:44px;padding:8px 0}
@@ -138,6 +140,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   <button id="itemPrev" aria-label="Previous item">&#9664;</button>
   <div class="label" id="itemLabel"><small>Item</small>—</div>
   <button id="itemNext" aria-label="Next item">&#9654;</button>
+  <button class="danger itemDel" id="btnDelItem" title="Delete this item">&#128465;</button>
 </div>
 
 <div class="photoBox" id="photoBox"></div>
@@ -279,12 +282,12 @@ function render(){
     $('first').onclick = newItem;
     $('photoLabel').textContent = "—";
     $('locBody').innerHTML = ""; $('clips').innerHTML = "";
-    ['photoPrev','photoNext','btnTake','btnChoose','btnDelPhoto','include','desc','tags',
-     'btnDictate','btnRec'].forEach(id => $(id).disabled = true);
+    ['photoPrev','photoNext','btnTake','btnChoose','btnDelPhoto','btnDelItem','include',
+     'desc','tags','btnDictate','btnRec'].forEach(id => $(id).disabled = true);
     return;
   }
-  ['photoPrev','photoNext','btnTake','btnChoose','btnDelPhoto','include','desc','tags',
-   'btnDictate','btnRec'].forEach(id => $(id).disabled = false);
+  ['photoPrev','photoNext','btnTake','btnChoose','btnDelPhoto','btnDelItem','include',
+   'desc','tags','btnDictate','btnRec'].forEach(id => $(id).disabled = false);
 
   if (!e){
     $('photoBox').innerHTML = `<div class="empty"><p>No photo entries.</p>
@@ -407,6 +410,22 @@ $('itemNext').onclick = () => { if (ii<items.length-1){ ii++; pi=0; render(); } 
 $('photoPrev').onclick = () => { if (pi>0){ pi--; render(); } };
 $('photoNext').onclick = () => { const it=item(); if (it&&pi<it.photos.length-1){ pi++; render(); } };
 $('btnNewItem').onclick = newItem;
+
+$('btnDelItem').onclick = async () => {
+  const it = item(); if (!it) return;
+  const n = it.photos.length;
+  const withPhotos = it.photos.filter(p => p.filename).length;
+  const clips = it.photos.reduce((a,p) => a + (p.audio_clips||[]).length, 0);
+  const bits = [`${n} incident${n===1?"":"s"}`];
+  if (withPhotos) bits.push(`${withPhotos} photo${withPhotos===1?"":"s"}`);
+  if (clips) bits.push(`${clips} recording${clips===1?"":"s"}`);
+  if (!confirm(`Delete item ${it.item_id}?\n\n${bits.join(" · ")} will be permanently removed. This cannot be undone.`)) return;
+  await api(`/api/item/${it.item_id}`, {method:"DELETE"});
+  items.splice(ii,1);
+  if (ii >= items.length) ii = Math.max(0, items.length-1);
+  pi = 0;
+  render(); say(`Item ${it.item_id} deleted.`,"ok");
+};
 
 /* Camera and library are separate inputs: `capture` sends you straight into
    the phone's camera app, without it you get the photo library. */
