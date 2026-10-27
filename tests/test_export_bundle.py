@@ -3,7 +3,10 @@ bundle, and check the zip holds the report, tagged photos and pinned plans."""
 
 import io
 import json
+import subprocess
+import sys
 import zipfile
+from pathlib import Path
 
 import piexif
 import pymupdf
@@ -157,6 +160,29 @@ def test_every_floor_plan_gets_its_own_image_even_with_the_same_name(client):
     for name, (x, color) in expected.items():
         assert _pin_color(zf, f"{folder}/plans/{name}", x, 0.5) == color
         assert _pin_color(zf, f"{folder}/plans/{name}", 0.2, 0.5) == (255, 255, 255)
+
+
+WEBAPP = Path(__file__).resolve().parent.parent / "webapp"
+_LAUNCHES = {
+    # python run.py, or gunicorn webapp.server:app from the repo root
+    "repo root": (WEBAPP.parent, "from webapp import server"),
+    # python server.py, or gunicorn --chdir webapp server:app
+    "inside webapp/": (WEBAPP, "import server"),
+    # a wsgi file or service that loads server.py by path from elsewhere
+    "by file path": (None, "import importlib.util; "
+                           f"spec = importlib.util.spec_from_file_location('server', {str(WEBAPP / 'server.py')!r}); "
+                           "server = importlib.util.module_from_spec(spec); spec.loader.exec_module(server)"),
+}
+
+
+@pytest.mark.parametrize("launch", _LAUNCHES)
+def test_export_bundle_loads_however_the_server_is_started(launch, tmp_path):
+    cwd, load_server = _LAUNCHES[launch]
+    code = f"{load_server}; print(server._export_bundle().folder_name('Job A'))"
+    run = subprocess.run([sys.executable, "-c", code], cwd=cwd or tmp_path,
+                         capture_output=True, text=True, timeout=60)
+    assert run.returncode == 0, run.stderr
+    assert run.stdout.strip().splitlines()[-1] == "Job A"
 
 
 def test_bundle_without_plans_or_photos_still_has_report(client):
