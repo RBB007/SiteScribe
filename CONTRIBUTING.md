@@ -1,6 +1,6 @@
 # Contributing to SiteScribe
 
-**Only RBB007, tshoseints and allenmarden merge into `main`.** You write your module and send it in; they make everyone's code fit together and merge it.
+**Only RBB007, tshoseints and allenmarden merge into `main`.** You write your module and send it in; they make everyone's code fit together and merge it. Mergers: see [MERGING.md](MERGING.md).
 
 ## 1. Pick your module
 
