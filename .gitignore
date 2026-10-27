@@ -227,3 +227,10 @@ projects/
 *.mov
 *.m4a
 *.wav
+
+# Claude desktop app session files
+.claude/
+
+# macOS folder icon files
+Icon\r
+Icon?

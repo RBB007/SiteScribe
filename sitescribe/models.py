@@ -82,7 +82,10 @@ class PlanPin:
 
 @dataclass
 class Observation:
-    photo_path: Path | None = None
+    """One numbered entry in the report: photo(s) + description + flag + pin."""
+
+    photo_path: Path | None = None   # the main photo (same as photos[0])
+    photos: list[Path] = field(default_factory=list)  # all photos, in order
     audio_path: Path | None = None
     description: str = ""     # typed caption, or transcript of the voice memo
     severity: Severity = Severity.INFO
@@ -105,6 +108,9 @@ class Project:
     template_path: Path | None = None
     observations: list[Observation] = field(default_factory=list)
     summary: str = ""         # AI-drafted, editable before export
+    # Export choices from the app's options dialog, e.g.
+    # {"include_photo_log": True, "include_marked_plans": True, "embed_photo_info": True}
+    report_options: dict = field(default_factory=dict)
 
     def sheet(self, sheet_id: str) -> PlanSheet:
         return next(s for s in self.plans if s.id == sheet_id)
