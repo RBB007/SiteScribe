@@ -113,6 +113,22 @@ def test_embed_writes_entry_into_png(tmp_path):
     assert Image.open(out).tobytes() == Image.open(src).tobytes()
 
 
+def test_embed_copies_the_photo_named_by_out_path(tmp_path):
+    main = tmp_path / "003_main.jpg"
+    Image.new("RGB", (64, 48), "red").save(main)
+    second = tmp_path / "003_second.jpg"
+    Image.new("RGB", (64, 48), "blue").save(second)
+    obs = _observation(main)
+    obs.photos = [main, second]   # Observation.photos once models.py has it
+
+    out_second = photos.embed_observation(obs, tmp_path / "output" / second.name)
+    out_other = photos.embed_observation(obs, tmp_path / "output" / "renamed.jpg")
+
+    assert Image.open(out_second).tobytes() == Image.open(second).tobytes()
+    assert Image.open(out_other).tobytes() == Image.open(main).tobytes()
+    assert piexif.ImageIFD.XPTitle in piexif.load(str(out_second))["0th"]
+
+
 def test_embed_without_photo_raises():
     with pytest.raises(ValueError, match="no photo"):
         photos.embed_observation(Observation(number=1), "out.jpg")

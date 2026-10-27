@@ -1,10 +1,10 @@
 # Contributing to SiteScribe
 
-**Only RBB007, tshoseints and allenmarden merge into `main`.** You write your module and send it in; they make everyone's code fit together and merge it. Mergers: see [MERGING.md](MERGING.md).
+**Only RBB007, tshoseints, allenmarden and hmmigdal merge into `main`.** You write your module and send it in; they make everyone's code fit together and merge it. Mergers: see [MERGING.md](MERGING.md).
 
 ## 1. Pick your module
 
-Each file in `sitescribe/` (and `app.py`) already has its functions written out with a docstring saying what goes in and what comes out. Put your name in the **Owner** line at the top of your file and fill in the function bodies.
+Each file in `sitescribe/` already has its functions written out with a docstring saying what goes in and what comes out. Put your name in the **Owner** line at the top of your file and fill in the function bodies.
 
 **Keep the function names, inputs and outputs exactly as they are.** That's what lets RBB007 drop your code in without rewriting it. You can add as many helper functions as you like inside your file.
 
@@ -38,9 +38,9 @@ Send RBB007 your finished `.py` file(s) and any packages you added. RBB007 commi
 
 ## 4. Rules that keep integration painless
 
-- **Stay in your own file.** If you need a change in someone else's module, ask them or RBB007.
+- **Stay in your own file.** If you need a change in someone else's module, ask them or RBB007. The web app in `webapp/` belongs to tshoseints; the routes call your module, you never edit the routes.
 - **Add packages to `requirements.txt`** in the same change, with a comment naming your module.
 - **Test your function on its own** before sending it, e.g. in a scratch script or `tests/`.
 - **No API keys in code.** Read them from environment variables. The repo is public and bots scrape leaked keys within minutes.
-- **No big files.** Don't commit plan sets, videos, audio, or photo dumps. Project data lives in `projects/`, which git ignores.
+- **No big files.** Don't commit plan sets, videos, audio, or photo dumps. Site data lives in `webapp/data/` and `webapp/uploads/` (and `projects/` for the storage module), all of which git ignores.
 - **Send early, send often.** A working half-feature sent at hour 4 is easier to integrate than a perfect one sent at hour 20.

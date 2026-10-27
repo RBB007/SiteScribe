@@ -27,10 +27,20 @@ cd SiteScribe
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-streamlit run app.py
+python run.py
 ```
 
-To use it on a phone, connect the phone to the same Wi-Fi and open the **Network URL** Streamlit prints.
+Open http://localhost:5000 and enter the PIN (default `2424`; set `SITESCRIBE_PIN` to change it). Run it from the repo root, not from inside `webapp/`. For auto-reload and Flask's debug error pages while developing, set `FLASK_DEBUG=1`.
+
+To use it on a phone, the camera and microphone need HTTPS, so a LAN address is not enough. Open a tunnel and use the URL it prints:
+
+```bash
+cloudflared tunnel --url http://localhost:5000
+```
+
+The tunnel URL is public, so run the app **without** `FLASK_DEBUG` when tunnelling (debug error pages show stack traces to anyone who opens them) and set `SITESCRIBE_PIN` to something other than the default.
+
+There is also an always-on shared instance for the team; see [DEPLOY.md](DEPLOY.md).
 
 API keys go in a `.env` file or environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`), never in code.
 
@@ -38,53 +48,54 @@ API keys go in a `.env` file or environment variables (`ANTHROPIC_API_KEY`, `OPE
 
 Give it [AI_INSTRUCTIONS.md](AI_INSTRUCTIONS.md). It explains the one rule that matters (keep the function signatures and the data model exactly as they are) so your code drops into the app without rework.
 
-## The app (`app.py`)
+## The app (`webapp/`)
 
-Three screens, picked at the top: **Setup**, **Capture**, **Report**.
-
-Capture is the phone screen. Big buttons start an entry (take/select photo, pick a location on the plan, or a text/voice note), then the entry editor shows:
+A Flask web app, phone-first. The landing page lists reports and opens one; the capture page is the screen you use on site:
 
 ```
 <prev>  Item #  <next>
-photo(s)                 take/select photo button if none
+photo(s)                 take/select photo
 <prev>  Photo #  <next>
-location                 pick-on-plan button if none
-description              typed, and/or a voice note
+location                 tap the spot on the plan (PDF or image)
+description              typed, dictated (browser speech, no key) or recorded
 importance flag          Info / Minor / Major / Critical / Safety
-tags, action item
+tags, include-in-report
 ```
 
-Report has the AI draft button, the summary, an export options dialog, and the export button. The Word report and marked-up plan set come from `word_report.py` and `plan_markup.py`; photo info is embedded by `photos.py`.
+Export gives a Word report of the included items, in the firm's template if one was uploaded for that report. Details of the data model, routes and config are in [webapp/README.md](webapp/README.md).
 
-Every module call goes through `try_step()`, so a module that isn't written yet shows "not built yet" instead of breaking the app. A sample grid plan sheet is built in (Setup tab) so the location picker can be tried before `plans.py` exists.
+Today the routes do their work inline (Whisper call, plain python-docx report). The integration step wires each route to its `sitescribe/` module through a small adapter, `webapp/bridge.py`, keeping the inline code as the fallback, so a module that is not written yet never breaks the app. The route-by-route map is in [INTEGRATION_PLAN.md](INTEGRATION_PLAN.md).
 
 ## Code layout
 
-The app (`app.py`) only calls functions in the `sitescribe/` package. Each module has its functions already defined with a docstring saying exactly what goes in and what comes out — fill in the body. Until a module is written the app says "not built yet" instead of crashing, so the app runs from day one.
+The web app only calls functions in the `sitescribe/` package. Each module has its functions already defined with a docstring saying exactly what goes in and what comes out — fill in the body. Until a module is written the app falls back to its built-in behaviour instead of crashing, so the app runs from day one.
 
 | File | Stage | What it does | Owner |
 | --- | --- | --- | --- |
 | `sitescribe/models.py` | all | Shared data: `Project`, `PlanSheet`, `Observation`, `PlanPin`, `Severity` | RBB007 |
 | `sitescribe/storage.py` | all | Saves/loads a project folder | RBB007 |
 | `sitescribe/plans.py` | before | Plan PDF → one image per sheet | |
-| `sitescribe/photos.py` | on site | Read photo GPS/time; write caption/severity into the photo file | |
+| `sitescribe/photos.py` | on site | Read photo GPS/time; write caption/severity into the photo file | allenmarden |
 | `sitescribe/voice.py` | on site | Voice memo → text; spoken location → pin | |
 | `sitescribe/locate.py` | on site | GPS → pin on the plan | |
 | `sitescribe/ai_writer.py` | after | AI summary, cleaned-up captions, action items | |
 | `sitescribe/plan_markup.py` | after | Plan set PDF with color-coded numbered pins | |
 | `sitescribe/word_report.py` | after | The Word report | |
-| `app.py` | all | Phone-friendly Streamlit UI | RBB007 |
+| `webapp/server.py` | all | Flask routes, PIN login, storage, Word export fallback | tshoseints |
+| `webapp/templates/` | all | Landing page and capture UI | tshoseints |
+| `webapp/bridge.py` | all | JSON ⇄ `models.py` adapter (coming with the integration PR) | RBB007 |
+| `run.py` | all | Starts the web app from the repo root | RBB007 |
 
 ## Team
 
 | Name | GitHub | Working on |
 | --- | --- | --- |
-| | [@RBB007](https://github.com/RBB007) | Repo manager, integration, app UI |
-| | [@tshoseints](https://github.com/tshoseints) | Merger |
-| | [@allenmarden](https://github.com/allenmarden) | Merger |
+| | [@RBB007](https://github.com/RBB007) | Repo manager, integration, `bridge.py` |
+| | [@tshoseints](https://github.com/tshoseints) | Merger, web app (`webapp/`) |
+| | [@allenmarden](https://github.com/allenmarden) | Merger, `photos.py` |
 | | [@Markr78-CT](https://github.com/Markr78-CT) | |
 | | [@sfarbic](https://github.com/sfarbic) | |
-| | [@hmmigdal](https://github.com/hmmigdal) | |
+| | [@hmmigdal](https://github.com/hmmigdal) | Merger |
 | | [@trevortaGIT13](https://github.com/trevortaGIT13) | |
 
 ## Demo
@@ -93,4 +104,4 @@ _Screenshots, demo video, and sample report go here before judging._
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Short version: write your module, send it in, RBB007, tshoseints or allenmarden merges.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Short version: write your module, send it in, RBB007, tshoseints, allenmarden or hmmigdal merges.
