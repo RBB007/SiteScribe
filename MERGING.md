@@ -1,11 +1,11 @@
 # SiteScribe: How to merge into `main`
 
-**For:** tshoseints and allenmarden
+**For:** tshoseints, allenmarden and hmmigdal
 **Repo:** https://github.com/RBB007/SiteScribe
 
-You two, plus RBB007, are the only people who can approve code going into `main`. Everyone else sends their code in as a pull request (PR), and one of you reviews and merges it.
+You three, plus RBB007, are the only people who can approve code going into `main`. Everyone else sends their code in as a pull request (PR), and one of you reviews and merges it.
 
-**One rule GitHub enforces:** you can't approve your own PR. When *you* write code, one of the other two mergers (RBB007, tshoseints, allenmarden) has to approve it.
+**One rule GitHub enforces:** you can't approve your own PR. When *you* write code, one of the other mergers (RBB007, tshoseints, allenmarden, hmmigdal) has to approve it.
 
 ---
 
@@ -42,7 +42,7 @@ You two, plus RBB007, are the only people who can approve code going into `main`
    git push -u origin yourname/what-you-did
    ```
 2. Open a pull request on GitHub (the yellow **Compare & pull request** banner appears after you push).
-3. Ask one of the other two mergers to approve it.
+3. Ask one of the other mergers to approve it.
 4. Once it's approved, click **Merge pull request** yourself.
 
 ## If someone sends you a file instead of a PR

@@ -60,7 +60,7 @@ The app (`app.py`) only calls functions in the `sitescribe/` package. Each modul
 | | [@allenmarden](https://github.com/allenmarden) | Merger |
 | | [@Markr78-CT](https://github.com/Markr78-CT) | |
 | | [@sfarbic](https://github.com/sfarbic) | |
-| | [@hmmigdal](https://github.com/hmmigdal) | |
+| | [@hmmigdal](https://github.com/hmmigdal) | Merger |
 | | [@trevortaGIT13](https://github.com/trevortaGIT13) | |
 
 ## Demo
@@ -69,4 +69,4 @@ _Screenshots, demo video, and sample report go here before judging._
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Short version: write your module, send it in, RBB007, tshoseints or allenmarden merges.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Short version: write your module, send it in, RBB007, tshoseints, allenmarden or hmmigdal merges.
