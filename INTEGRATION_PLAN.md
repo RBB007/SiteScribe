@@ -62,7 +62,7 @@ The fallback is whatever the Flask app does today (inline Whisper call, plain py
 | `plans[]` (`plan_id`, `file`, `pages`) | one `PlanSheet` per page: `source_pdf`, `page_index`, `image_path` (from `plans.py`) |
 | – | `Project.name / site_address / engineer / summary / report_options` come from a small **new** `POST /api/visit` settings form (project name, address, engineer, Word template upload) |
 
-Two fields are added to `models.py` (RBB007 only): `Observation.include` and `Observation.captions`. Both default to harmless values, so no module needs to change.
+Two fields are still to be added to `models.py` (RBB007 only, tracked in #7): `Observation.include` and `Observation.captions`. Both will default to harmless values, so no module needs to change. They are not on `main` yet.
 
 ## Repo layout after the merge
 
@@ -81,9 +81,9 @@ AI_INSTRUCTIONS.md unchanged rules; "frame" paragraph updated to Flask
 
 ## Order of merges
 
-1. **Hosein opens a PR from `hosein/item-capture-app`** (nothing to change; it adds `webapp/` only). RBB007 approves and merges. Hosein deletes `app/capture-skeleton` and `scaffold/project-structure`, which this supersedes.
-2. **PR #1 is re-scoped** (RBB007): keep `models.py` + `storage.py` changes (adding `include` and `captions`), `AI_INSTRUCTIONS.md`, tests; drop the Streamlit `app.py` rewrite and `.streamlit/`; delete `app.py` and the Streamlit requirements; rewrite README "Run it" and "The app" for Flask. Retitled "Shared model, AI agent instructions, docs for the Flask frame".
-3. **Integration PR** (RBB007): `webapp/bridge.py`, `run.py`, the `try_module` wrapper, and the route changes in the table above with fallbacks. Hosein reviews since it touches `server.py`.
+1. **Hosein's `webapp/` lands** — done. PR #5 (`hosein/item-capture-app`) merged into `main` as it was. Hosein deletes `app/capture-skeleton` and `scaffold/project-structure`, which it supersedes.
+2. **Streamlit retired, docs for the Flask frame** — PR #4 (this document). PR #1 was merged unchanged rather than re-scoped, so this PR does the cleanup instead: deletes `app.py`, `.streamlit/` and the Streamlit requirements, adds `run.py`, and rewrites the README, `AI_INSTRUCTIONS.md`, `MERGING.md` and `CONTRIBUTING.md` for Flask. The `Observation.include` and `Observation.captions` fields are **not** in this PR; they come in a small follow-up PR to `models.py` and `storage.py` (#7).
+3. **Integration PR** (RBB007): `webapp/bridge.py`, the `try_module` wrapper, and the route changes in the table above with fallbacks (#8, #9, #10). `run.py` is already in from step 2. Hosein reviews since it touches `server.py`.
 4. **Module PRs** land in any order after that. Each one replaces a fallback.
 
 ## What module authors need to know

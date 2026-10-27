@@ -30,13 +30,15 @@ pip install -r requirements.txt
 python run.py
 ```
 
-Open http://localhost:5000 and enter the PIN (default `2424`; set `SITESCRIBE_PIN` to change it). Run it from the repo root, not from inside `webapp/`.
+Open http://localhost:5000 and enter the PIN (default `2424`; set `SITESCRIBE_PIN` to change it). Run it from the repo root, not from inside `webapp/`. For auto-reload and Flask's debug error pages while developing, set `FLASK_DEBUG=1`.
 
 To use it on a phone, the camera and microphone need HTTPS, so a LAN address is not enough. Open a tunnel and use the URL it prints:
 
 ```bash
 cloudflared tunnel --url http://localhost:5000
 ```
+
+The tunnel URL is public, so run the app **without** `FLASK_DEBUG` when tunnelling (debug error pages show stack traces to anyone who opens them) and set `SITESCRIBE_PIN` to something other than the default.
 
 There is also an always-on shared instance for the team; see [DEPLOY.md](DEPLOY.md).
 
