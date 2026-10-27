@@ -470,16 +470,63 @@ let tT; $('tags').oninput = () => { clearTimeout(tT); tT = setTimeout(()=>
   patch({tags: $('tags').value.split(",").map(s=>s.trim()).filter(Boolean)}), 700); };
 
 /* ---------------- dictation ---------------- */
+
+/* Fold a SpeechRecognition results list into {fin, interim}, tolerating both
+   fragment-per-entry and cumulative-per-entry browsers.
+
+   Comparison is done on a normalised copy (lowercased, punctuation stripped)
+   because Android capitalises and punctuates finalised entries, so an exact
+   startsWith would miss the overlap and let the duplicates back in. */
+function speechKey(t){
+  return t.toLowerCase().replace(/[.,!?;:\u2019']/g, "").replace(/\s+/g, " ").trim();
+}
+
+function assembleSpeech(results){
+  const finals = [];
+  let interim = "";
+  for (let i = 0; i < results.length; i++){
+    const t = (results[i][0] && results[i][0].transcript || "").trim();
+    if (!t) continue;
+    if (results[i].isFinal) finals.push(t);
+    else interim = t;            // the newest interim IS the whole current guess
+  }
+
+  let fin = "";
+  for (const t of finals){
+    if (!fin){ fin = t; continue; }
+    const a = speechKey(fin), b = speechKey(t);
+    /* cumulative only when the entry is STRICTLY longer and extends what we
+       have; equal-length means the speaker genuinely repeated themselves */
+    if (b.length > a.length && b.startsWith(a)) fin = t;
+    else fin += " " + t;
+  }
+
+  /* an interim that merely restates the final adds nothing - but never let an
+     interim become the final when there is no final yet */
+  if (fin && interim){
+    const a = speechKey(fin), b = speechKey(interim);
+    if (b.length > a.length && b.startsWith(a)){ fin = interim; interim = ""; }
+    else if (a.endsWith(b)) interim = "";
+  }
+  return { fin, interim };
+}
+
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let sr=null, dictating=false, baseText="", finalText="";
+let sr=null, dictating=false, baseText="", finalText="", wantMore=false;
 if (!SR) $('btnDictate').title = "This browser has no speech recognition";
 
 $('btnDictate').onclick = () => {
   if (!entry()) return say("Add a photo entry first","bad");
   if (!SR){ $('recMsg').className="msg bad";
     $('recMsg').textContent="No browser dictation — use the mic key on your keyboard."; return; }
-  if (dictating){ sr.stop(); return; }
-  sr = new SR(); sr.lang="en-US"; sr.continuous=true; sr.interimResults=true;
+  if (dictating){ wantMore = false; sr.stop(); return; }
+  sr = new SR(); sr.lang = "en-US"; sr.interimResults = true;
+  /* Chrome on Android duplicates finalised results when continuous is on, so
+     run single-utterance there and restart on end while the user is still
+     dictating. Desktop keeps continuous for a smoother stream. */
+  const ANDROID = /Android/i.test(navigator.userAgent);
+  sr.continuous = !ANDROID;
+  wantMore = true;
   /* keep the user's existing text exactly as typed, line breaks and all;
      only add a separator when it does not already end in whitespace */
   baseText = $('desc').value;
@@ -490,21 +537,32 @@ $('btnDictate').onclick = () => {
   /* Rebuild from the whole results list every time. Several mobile browsers
      report resultIndex as 0 on every event, so appending incrementally
      re-adds words that were already final ("can you / can you see / ..."). */
+  /* Browsers disagree about what results[] holds. Some give one fragment per
+     entry ("can you", "see this"); others give a CUMULATIVE transcript in
+     every entry ("can you", "can you see", "can you see this"). Concatenating
+     blindly duplicates the cumulative kind. assembleSpeech() detects which by
+     testing whether each entry extends the previous one. */
   sr.onresult = ev => {
-    let fin = "", interim = "";
-    for (let i = 0; i < ev.results.length; i++) {
-      const t = ev.results[i][0].transcript;
-      if (ev.results[i].isFinal) fin += t.trim() + " "; else interim += t;
-    }
+    const { fin, interim } = assembleSpeech(ev.results);
     finalText = fin;
-    $('desc').value = baseText + (fin + interim).replace(/\s+/g, " ").trimStart();
+    const spoken = (fin + (fin && interim ? " " : "") + interim);
+    $('desc').value = baseText + spoken.replace(/\s+/g, " ").trimStart();
   };
-  sr.onerror = ev => { $('recMsg').className="msg bad";
+  sr.onerror = ev => {
+    if (ev.error === "no-speech" && wantMore) return;   // restarting; stay quiet
+    wantMore = false;
+    $('recMsg').className="msg bad";
     $('recMsg').textContent = ev.error==="not-allowed" ? "Microphone permission denied."
       : ev.error==="no-speech" ? "Didn't catch anything — try again."
       : ev.error==="network" ? "Dictation needs a network connection."
       : "Dictation error: "+ev.error; };
   sr.onend = () => {
+    if (wantMore) {                      // single-utterance mode: keep listening
+      const committed = (baseText + finalText).replace(/\s+/g, " ").trimStart();
+      baseText = committed ? committed + " " : "";
+      finalText = "";
+      try { sr.start(); return; } catch (e) { /* fall through and stop */ }
+    }
     dictating = false; $('btnDictate').innerHTML = "&#127908; Dictate";
     /* keep only finalised speech; drop any trailing interim guess */
     $('desc').value = (baseText + finalText.replace(/\s+/g, " ").trimStart()).trimEnd();

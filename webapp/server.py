@@ -138,6 +138,16 @@ def logout():
     return redirect(url_for("login"))
 
 
+@app.after_request
+def _no_html_cache(resp):
+    """Never let a phone hold a stale page: the UI changes under people mid-visit."""
+    if (resp.mimetype or "").startswith("text/html"):
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+    return resp
+
+
 @app.route("/health")
 def health():
     return jsonify(status="ok", service="sitescribe", time=_now())
