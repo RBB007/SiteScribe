@@ -1,0 +1,2 @@
+# Add packages your module needs here, in the same PR that uses them.
+pytest
