@@ -1249,16 +1249,30 @@ def api_export_docx():
 _BUNDLE_MODULE = "sitescribe_export_bundle"
 
 
+def _bundle_candidates():
+    """Where export_bundle.py may sit. The real file's folder comes first: on
+    the live box server.py is reached through a link in /opt/sitescribe (so
+    BASE, and data/, stay outside the repo) while export_bundle.py and
+    sitescribe/ are only in the checked-out repo the link points into."""
+    here = os.path.dirname(os.path.realpath(__file__))
+    return list(dict.fromkeys([os.path.join(here, "export_bundle.py"),
+                               os.path.join(BASE, "export_bundle.py")]))
+
+
 def _export_bundle():
-    """webapp/export_bundle.py, loaded from beside this file. Going by path
-    rather than by name works however the server was started: run.py,
-    `python server.py`, gunicorn, or a wsgi file that loads server.py by path
-    (where neither `webapp` nor webapp/ is on sys.path)."""
+    """webapp/export_bundle.py, loaded by path rather than by name so it works
+    however the server was started: run.py, `python server.py`, gunicorn, a
+    wsgi file that loads server.py by path, or server.py reached by a link."""
     mod = sys.modules.get(_BUNDLE_MODULE)
     if mod is None:
+        candidates = _bundle_candidates()
+        path = next((p for p in candidates if os.path.isfile(p)), None)
+        if path is None:
+            raise FileNotFoundError(
+                "export_bundle.py not found; looked in " + ", ".join(candidates) +
+                ". Deploy webapp/export_bundle.py and sitescribe/ with server.py.")
         import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            _BUNDLE_MODULE, os.path.join(BASE, "export_bundle.py"))
+        spec = importlib.util.spec_from_file_location(_BUNDLE_MODULE, path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         sys.modules[_BUNDLE_MODULE] = mod

@@ -185,6 +185,49 @@ def test_export_bundle_loads_however_the_server_is_started(launch, tmp_path):
     assert run.stdout.strip().splitlines()[-1] == "Job A"
 
 
+def _load_by_path(server_py: Path) -> str:
+    return ("import importlib.util; "
+            f"spec = importlib.util.spec_from_file_location('server', {str(server_py)!r}); "
+            "server = importlib.util.module_from_spec(spec); spec.loader.exec_module(server)")
+
+
+def test_export_bundle_found_when_base_is_outside_the_repo(monkeypatch, tmp_path):
+    # The live layout: BASE (where data/ lives) is /opt/sitescribe, which has
+    # no export_bundle.py; the real server.py is in the repo checkout.
+    monkeypatch.setattr(server, "BASE", str(tmp_path))
+    monkeypatch.delitem(sys.modules, server._BUNDLE_MODULE, raising=False)
+
+    assert server._export_bundle().folder_name("Job A") == "Job A"
+
+
+def test_export_bundle_found_through_a_linked_server_py(tmp_path):
+    opt = tmp_path / "opt"
+    opt.mkdir()
+    try:
+        (opt / "server.py").symlink_to(WEBAPP / "server.py")
+    except OSError:
+        pytest.skip("this machine can't create file symlinks")
+    code = f"{_load_by_path(opt / 'server.py')}; print(server._export_bundle().folder_name('Job A'))"
+    run = subprocess.run([sys.executable, "-c", code], cwd=tmp_path,
+                         capture_output=True, text=True, timeout=60)
+    assert run.returncode == 0, run.stderr
+    assert run.stdout.strip().splitlines()[-1] == "Job A"
+    assert (opt / "data").is_dir()        # data still lives beside the link
+
+
+def test_copied_server_py_says_what_is_missing(tmp_path):
+    opt = tmp_path / "opt"
+    opt.mkdir()
+    (opt / "server.py").write_bytes((WEBAPP / "server.py").read_bytes())
+    code = (f"{_load_by_path(opt / 'server.py')}\n"
+            "try:\n    server._export_bundle()\nexcept FileNotFoundError as e:\n    print(e)")
+    run = subprocess.run([sys.executable, "-c", code], cwd=tmp_path,
+                         capture_output=True, text=True, timeout=60)
+    assert run.returncode == 0, run.stderr
+    message = run.stdout.strip().splitlines()[-1]
+    assert "looked in" in message and str(opt) in message and "Deploy webapp/export_bundle.py" in message
+
+
 def test_bundle_without_plans_or_photos_still_has_report(client):
     item_id, photo_id = _item(client)
     _details(client, item_id, photo_id, description="Note only")
