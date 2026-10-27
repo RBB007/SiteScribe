@@ -36,6 +36,16 @@ Before anything is swapped in, the deploy script:
 Log: `/opt/sitescribe/deploy.log` — every run appends `deployed <sha>`,
 `no change`, or `SYNTAX ERROR in <sha> - not deploying`.
 
+## Export timeouts
+
+Building an export renders every pinned plan page and re-encodes every photo,
+which takes a minute or more on a big visit. Gunicorn kills a worker after 30 s
+by default, and the phone then sees "Export failed: Bad Gateway". The repo's
+`gunicorn.conf.py` sets `timeout = 300` (and 4 threads, so an export does not
+stall other phones); gunicorn reads it on its own when started from the repo
+root, otherwise start it with `-c /opt/sitescribe/app/gunicorn.conf.py` or
+`--timeout 300`.
+
 ## What is NOT in the repo
 
 `data/` and `uploads/` live outside the repo on the server and are never touched

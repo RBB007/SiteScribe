@@ -137,7 +137,13 @@ def _sheets(data: dict, observations: list[Observation], plans_dir: Path, work_d
         source = plans_dir / plan["file"]
         if not source.exists():
             continue
-        pages = plans.load_plan_set(source, work_dir / str(plan_id))
+        try:
+            pages = plans.load_plan_set(source, work_dir / str(plan_id))
+        except Exception as exc:
+            # one unreadable plan file must not cost the whole report; its
+            # pins then show no sheet name and no marked-up page
+            print(f"[sitescribe] could not render plan {source}: {exc!r}", file=sys.stderr)
+            continue
         label = _plan_label(plan)
         for sheet in pages:
             sheet.id = sheet_id(plan_id, sheet.page_index + 1)
