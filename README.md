@@ -90,13 +90,16 @@ The web app only calls functions in the `sitescribe/` package. Each module has i
 
 | Name | GitHub | Working on |
 | --- | --- | --- |
-| | [@RBB007](https://github.com/RBB007) | Repo manager, integration, `bridge.py` |
-| | [@tshoseints](https://github.com/tshoseints) | Merger, web app (`webapp/`) |
-| | [@allenmarden](https://github.com/allenmarden) | Merger, `photos.py` |
-| | [@Markr78-CT](https://github.com/Markr78-CT) | |
-| | [@sfarbic](https://github.com/sfarbic) | |
-| | [@hmmigdal](https://github.com/hmmigdal) | Merger |
-| | [@trevortaGIT13](https://github.com/trevortaGIT13) | |
+|  | [@RBB007](https://github.com/RBB007) | Repo manager, integration, `bridge.py` |
+| Hosein Kerdar | [@tshoseints](https://github.com/tshoseints) | Merger, web app (`webapp/`) |
+| Allen Marden | [@allenmarden](https://github.com/allenmarden) | Merger, `photos.py` |
+| Heather Migdal | [@hmmigdal](https://github.com/hmmigdal) | Merger |
+| Mark Rodriguez | [@Markr78-CT](https://github.com/Markr78-CT) |  |
+| Sean Arbic (GFDS Engineers) | [@sfarbic](https://github.com/sfarbic) |  |
+| Anthony Giammona | [@Nyaagwork](https://github.com/Nyaagwork) |  |
+| Trevor Taylor | [@trevortaGIT13](https://github.com/trevortaGIT13) |  |
+| David Goldson | [@DavidG66-max](https://github.com/DavidG66-max) |  |
+| Pengyu Chen | [@GFDS-PC](https://github.com/GFDS-PC) |  |
 
 ## Demo
 
