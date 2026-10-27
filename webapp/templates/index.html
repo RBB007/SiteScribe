@@ -148,10 +148,12 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   <button id="photoNext" aria-label="Next photo">&#8594;</button>
 </div>
 <div class="row" style="margin-top:8px">
-  <button class="ghost" id="btnAddPhoto">+ Photo</button>
-  <button class="danger" id="btnDelPhoto">Delete</button>
+  <button id="btnTake">&#128247; Take photo</button>
+  <button class="ghost" id="btnChoose">&#128449; Choose</button>
+  <button class="danger" id="btnDelPhoto" style="flex:0 0 auto">&#128465;</button>
 </div>
-<input type="file" accept="image/*" id="photoInput">
+<input type="file" accept="image/*" capture="environment" id="camInput">
+<input type="file" accept="image/*" id="libInput">
 <input type="file" accept="application/pdf,image/*" id="planInput">
 <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" id="tplInput">
 
@@ -277,17 +279,17 @@ function render(){
     $('first').onclick = newItem;
     $('photoLabel').textContent = "—";
     $('locBody').innerHTML = ""; $('clips').innerHTML = "";
-    ['photoPrev','photoNext','btnAddPhoto','btnDelPhoto','include','desc','tags',
+    ['photoPrev','photoNext','btnTake','btnChoose','btnDelPhoto','include','desc','tags',
      'btnDictate','btnRec'].forEach(id => $(id).disabled = true);
     return;
   }
-  ['photoPrev','photoNext','btnAddPhoto','btnDelPhoto','include','desc','tags',
+  ['photoPrev','photoNext','btnTake','btnChoose','btnDelPhoto','include','desc','tags',
    'btnDictate','btnRec'].forEach(id => $(id).disabled = false);
 
   if (!e){
     $('photoBox').innerHTML = `<div class="empty"><p>No photo entries.</p>
-      <button id="addFirst">+ Photo</button></div>`;
-    $('addFirst').onclick = () => addEntry("clear");
+      <button id="addFirst">&#128247; Take photo</button></div>`;
+    $('addFirst').onclick = () => { pendingSource = "cam"; addEntry("clear"); };
     $('photoLabel').textContent = "—";
     return;
   }
@@ -298,8 +300,12 @@ function render(){
   } else {
     $('photoBox').innerHTML = `<div class="empty">
       <p>No image on <span class="idTag">${e.photo_id}</span> yet</p>
-      <button id="shoot">Take / choose photo</button></div>`;
-    $('shoot').onclick = () => $('photoInput').click();
+      <div class="row" style="max-width:320px;margin:0 auto">
+        <button id="shootCam">&#128247; Take photo</button>
+        <button class="ghost" id="shootLib">&#128449; Choose</button>
+      </div></div>`;
+    $('shootCam').onclick = () => pick("cam");
+    $('shootLib').onclick = () => pick("lib");
   }
 
   const n = it.photos.length;
@@ -393,7 +399,7 @@ async function addEntry(mode){
   it.photos.push(e); pi = it.photos.length-1;
   render();
   say(mode==="keep" ? `${e.photo_id} — details carried over.` : `${e.photo_id} — blank entry.`, "ok");
-  $('photoInput').click();
+  openPicker(pendingSource);
 }
 
 $('itemPrev').onclick = () => { if (ii>0){ ii--; pi=0; render(); } };
@@ -402,9 +408,25 @@ $('photoPrev').onclick = () => { if (pi>0){ pi--; render(); } };
 $('photoNext').onclick = () => { const it=item(); if (it&&pi<it.photos.length-1){ pi++; render(); } };
 $('btnNewItem').onclick = newItem;
 
-$('btnAddPhoto').onclick = () => {
+/* Camera and library are separate inputs: `capture` sends you straight into
+   the phone's camera app, without it you get the photo library. */
+let pendingSource = "cam";
+function openPicker(src){ $(src === "cam" ? "camInput" : "libInput").click(); }
+
+/* Empty entry -> fill it. Entry already has an image -> ask Keep/Clear first,
+   then fill the new entry from the same source the user tapped. */
+function pick(src){
+  pendingSource = src;
   const e = entry();
   if (!e) return addEntry("clear");
+  if (!e.filename) return openPicker(src);
+  showAddDialog();
+}
+$('btnTake').onclick   = () => pick("cam");
+$('btnChoose').onclick = () => pick("lib");
+
+function showAddDialog(){
+  const e = entry();
   const bits = [];
   if (e.description) bits.push(`“${e.description.slice(0,42)}${e.description.length>42?"…":""}”`);
   bits.push(e.importance);
@@ -412,12 +434,12 @@ $('btnAddPhoto').onclick = () => {
   if ((e.tags||[]).length) bits.push(e.tags.join(", "));
   $('keepPreview').textContent = "Carries over: " + bits.join(" · ") + ". Audio is not copied.";
   $('addDlg').showModal();
-};
+}
 $('addCancel').onclick = () => $('addDlg').close();
 $('optKeep').onclick  = () => { $('addDlg').close(); addEntry("keep"); };
 $('optClear').onclick = () => { $('addDlg').close(); addEntry("clear"); };
 
-$('photoInput').onchange = async ev => {
+async function onPicked(ev){
   const f = ev.target.files[0]; if (!f || !item()) return;
   ev.target.value = "";
   const fd = new FormData(); fd.append("photo", f);
@@ -427,7 +449,9 @@ $('photoInput').onchange = async ev => {
   if (at >= 0) it.photos[at] = e; else it.photos.push(e);
   pi = it.photos.findIndex(p => p.photo_id === e.photo_id);
   render(); say(`Photo on ${e.photo_id}`,"ok");
-};
+}
+$('camInput').onchange = onPicked;
+$('libInput').onchange = onPicked;
 
 $('btnDelPhoto').onclick = async () => {
   const it = item(), e = entry(); if (!e) return;
