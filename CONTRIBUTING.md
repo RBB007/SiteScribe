@@ -1,6 +1,6 @@
 # Contributing to SiteScribe
 
-**RBB007 is the only person who merges into `main`.** You write your module and send it in; RBB007 makes everyone's code fit together and merges it.
+**Only RBB007, tshoseints and allenmarden merge into `main`.** You write your module and send it in; they make everyone's code fit together and merge it.
 
 ## 1. Pick your module
 
