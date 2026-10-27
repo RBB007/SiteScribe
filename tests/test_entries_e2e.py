@@ -170,15 +170,16 @@ def test_audio_does_not_overwrite_a_written_description(client):
 
 def test_export_uses_entry_headings_and_respects_include(client):
     client.post("/api/item")
-    client.patch("/api/item/001/photo/001_01", json={"description": "A", "importance": "Major"})
+    client.patch("/api/item/001/photo/001_01", json={"description": "kept entry", "importance": "Major"})
     upload(client, "001", photo_id="001_01")
     client.post("/api/item/001/photo", data={"inherit": "clear"})
-    client.patch("/api/item/001/photo/001_02", json={"description": "B", "include": False})
+    client.patch("/api/item/001/photo/001_02", json={"description": "dropped entry", "include": False})
     r = client.get("/api/export/docx")
     assert r.status_code == 200
     doc = zipfile.ZipFile(io.BytesIO(r.data)).read("word/document.xml").decode()
-    assert "001_01 — Major" in doc
-    assert "001_02" not in doc
+    # word_report numbers by item: the one included entry of item 001 is ITEM 1
+    assert "ITEM 1" in doc and "kept entry" in doc and "Major" in doc
+    assert "dropped entry" not in doc
 
 
 def test_entry_without_an_image_exports(client):

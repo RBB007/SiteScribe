@@ -195,7 +195,7 @@ def test_export_bundle_found_when_base_is_outside_the_repo(monkeypatch, tmp_path
     # The live layout: BASE (where data/ lives) is /opt/sitescribe, which has
     # no export_bundle.py; the real server.py is in the repo checkout.
     monkeypatch.setattr(server, "BASE", str(tmp_path))
-    monkeypatch.delitem(sys.modules, server._BUNDLE_MODULE, raising=False)
+    monkeypatch.delitem(sys.modules, "sitescribe_webapp_export_bundle", raising=False)
 
     assert server._export_bundle().folder_name("Job A") == "Job A"
 

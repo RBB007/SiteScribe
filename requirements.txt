@@ -15,5 +15,7 @@ pymupdf>=1.24        # plans.py: render plan pages to images
 # voice.py:                   requests (already above)
 # ai_writer.py:               anthropic
 # word_report.py:             python-docx (already above)
+docxtpl>=0.20        # word_report.py: firm templates with {{ }} tags (e.g. GFDS SOR template)
+pillow-heif>=0.16    # word_report.py: iPhone HEIC photos
 
 pytest

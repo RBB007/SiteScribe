@@ -33,8 +33,11 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import threading
 import time
+import traceback
+from pathlib import Path
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE, "data")
@@ -1075,6 +1078,94 @@ def api_template_delete():
 
 # ---------------------------------------------------------------- export
 
+def _sibling_candidates(name):
+    """Where webapp/<name>.py may sit. The real file's folder comes first: on
+    the live box server.py is reached through a link in /opt/sitescribe (so
+    BASE, and data/, stay outside the repo) while the other webapp/ modules
+    and sitescribe/ are only in the checked-out repo the link points into."""
+    here = os.path.dirname(os.path.realpath(__file__))
+    return list(dict.fromkeys([os.path.join(here, f"{name}.py"),
+                               os.path.join(BASE, f"{name}.py")]))
+
+
+def _sibling_module(name):
+    """webapp/<name>.py, loaded by path and cached in sys.modules. Going by
+    path rather than by name works however the server was started: run.py,
+    `python server.py`, gunicorn, a wsgi file that loads server.py by path
+    (where neither `webapp` nor webapp/ is on sys.path), or server.py
+    reached by a link. Raises FileNotFoundError naming the folders tried."""
+    key = f"sitescribe_webapp_{name}"
+    mod = sys.modules.get(key)
+    if mod is None:
+        candidates = _sibling_candidates(name)
+        path = next((p for p in candidates if os.path.isfile(p)), None)
+        if path is None:
+            raise FileNotFoundError(
+                f"{name}.py not found; looked in " + ", ".join(candidates) +
+                f". Deploy webapp/{name}.py and sitescribe/ with server.py.")
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(key, path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        sys.modules[key] = mod
+    return mod
+
+
+def _visit_date(entry):
+    """The project's creation time in the site's zone, else now."""
+    try:
+        when = datetime.datetime.fromisoformat(str(entry.get("created")).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return _local()
+    return when.astimezone(LOCAL_TZ) if when.tzinfo else when
+
+
+def _module_report(data, pid, entry):
+    """The report from sitescribe.word_report, with the visit converted by
+    bridge.to_project(). (buffer, None) on success; (None, reason) when the
+    module is not built yet (NotImplementedError) or cannot run, so the
+    built-in report below takes over and the user still gets a file. The
+    reason is short enough to show the user; the traceback goes to stderr.
+    Raises ImportError only when python-docx itself is missing."""
+    try:
+        bridge = _sibling_module("bridge")
+        from sitescribe import word_report
+    except (ImportError, OSError) as exc:
+        return None, _fallback(f"the Word report module could not load ({exc})")
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            project = bridge.to_project(
+                data,
+                name=entry.get("name") or pid,
+                item_dir=lambda item_id: item_dir(item_id, pid),
+                plans_dir=plans_dir(pid),
+                work_dir=Path(tmp) / "plans",
+                template=template_path(pid) if has_template(data, pid) else None,
+                visit_date=_visit_date(entry),
+                tz=LOCAL_TZ,
+            )
+            out = word_report.build_report(project, Path(tmp) / "site_visit_report.docx")
+            return io.BytesIO(Path(out).read_bytes()), None
+        except NotImplementedError:
+            return None, _fallback("the Word report module is not written yet", trace=False)
+        except ImportError as exc:
+            if "python-docx" in str(exc):
+                raise
+            return None, _fallback(f"the Word report module needs a package ({exc})", trace=False)
+        except Exception as exc:
+            return None, _fallback(f"the Word report module failed ({type(exc).__name__}: {exc})")
+
+
+def _fallback(reason, *, trace=True):
+    """Log why the built-in report is shipping instead of the module's, with
+    the traceback when there is one, and return the reason for the user."""
+    reason = " ".join(str(reason).split())
+    print(f"[sitescribe] {reason}; exporting built-in report", file=sys.stderr)
+    if trace:
+        traceback.print_exc(file=sys.stderr)
+    return reason
+
+
 def styled(doc, text, *candidates):
     """Add a paragraph using the first style the document actually has.
 
@@ -1208,22 +1299,50 @@ def _to_buffer(doc):
     return buf
 
 
-def _report_buffer(data, pid):
-    """The Word report as a buffer: in the template if there is one, else plain.
+def _report_buffer(data, pid, entry=None):
+    """(buffer, notice): the Word report, sitescribe.word_report's when it can
+    run, else the built-in one below, in the template if there is one, else
+    plain. notice is None when the module's report shipped, otherwise one
+    line saying why the built-in one did, for the user to see.
     Raises ImportError when python-docx is missing."""
+    if entry is None:
+        entry = find_project(load_index(), pid) or {}
+    buf, notice = _module_report(data, pid, entry)
+    if buf is not None:
+        return buf, None
+    notice = f"built-in report layout used because {notice}"
+
     from docx import Document
     from docx.shared import Inches, Pt
 
     if has_template(data, pid):
         path = template_path(pid)
         try:
-            return _to_buffer(_styled_doc(data, pid, path, Document, Inches, Pt))
+            return _to_buffer(_styled_doc(data, pid, path, Document, Inches, Pt)), notice
         except Exception as exc:
             # a template gone bad must never stand between the user and a
             # report — say so on the log and fall back to the plain one
             print(f"[sitescribe] template {path} unusable ({exc!r}); "
                   "exporting plain report", file=sys.stderr)
-    return _to_buffer(_plain_doc(data, pid, Document, Inches, Pt))
+            notice += f"; the template could not be used ({type(exc).__name__})"
+    return _to_buffer(_plain_doc(data, pid, Document, Inches, Pt)), notice
+
+
+def _notice_headers(notice):
+    """The fallback notice as a response header the page can show. Header
+    values are latin-1 and one line, so anything else becomes '?'."""
+    if not notice:
+        return {}
+    clean = "".join(ch if " " <= ch <= "~" else "?" for ch in notice)[:300]
+    return {"X-SiteScribe-Report-Notice": clean}
+
+
+def _export_snapshot(pid):
+    """The visit and its index entry, read under the lock. The report itself
+    is built outside it: rendering plans and photos takes seconds on a big
+    visit and must not stall every other request meanwhile."""
+    with _lock:
+        return load(pid), (find_project(load_index(), pid) or {})
 
 
 @app.route("/api/export/docx")
@@ -1231,52 +1350,26 @@ def _report_buffer(data, pid):
 @require_project
 def api_export_docx():
     pid = current_pid()
-    with _lock:
-        data = load(pid)
-        try:
-            buf = _report_buffer(data, pid)
-        except ImportError:
-            return jsonify(error="python-docx not installed"), 501
+    data, entry = _export_snapshot(pid)
+    try:
+        buf, notice = _report_buffer(data, pid, entry)
+    except ImportError:
+        return jsonify(error="python-docx not installed"), 501
 
-    return send_file(
+    resp = send_file(
         buf,
         mimetype=DOCX_MIME,
         as_attachment=True,
         download_name="site_visit_report.docx",
     )
-
-
-_BUNDLE_MODULE = "sitescribe_export_bundle"
-
-
-def _bundle_candidates():
-    """Where export_bundle.py may sit. The real file's folder comes first: on
-    the live box server.py is reached through a link in /opt/sitescribe (so
-    BASE, and data/, stay outside the repo) while export_bundle.py and
-    sitescribe/ are only in the checked-out repo the link points into."""
-    here = os.path.dirname(os.path.realpath(__file__))
-    return list(dict.fromkeys([os.path.join(here, "export_bundle.py"),
-                               os.path.join(BASE, "export_bundle.py")]))
+    resp.headers.update(_notice_headers(notice))
+    return resp
 
 
 def _export_bundle():
-    """webapp/export_bundle.py, loaded by path rather than by name so it works
-    however the server was started: run.py, `python server.py`, gunicorn, a
-    wsgi file that loads server.py by path, or server.py reached by a link."""
-    mod = sys.modules.get(_BUNDLE_MODULE)
-    if mod is None:
-        candidates = _bundle_candidates()
-        path = next((p for p in candidates if os.path.isfile(p)), None)
-        if path is None:
-            raise FileNotFoundError(
-                "export_bundle.py not found; looked in " + ", ".join(candidates) +
-                ". Deploy webapp/export_bundle.py and sitescribe/ with server.py.")
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(_BUNDLE_MODULE, path)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        sys.modules[_BUNDLE_MODULE] = mod
-    return mod
+    """webapp/export_bundle.py, loaded from beside this file (see
+    _sibling_module)."""
+    return _sibling_module("export_bundle")
 
 
 @app.route("/api/export/bundle")
@@ -1286,29 +1379,87 @@ def api_export_bundle():
     """A zip of one folder: the Word report, photos/ with each entry written
     into the photo's EXIF, and plans/ with every pinned plan page."""
     pid = current_pid()
-    with _lock:
-        data = load(pid)
-        try:
-            report = _report_buffer(data, pid).getvalue()
-        except ImportError:
-            return jsonify(error="python-docx not installed"), 501
-        entry = find_project(load_index(), pid) or {}
+    try:
+        buf, name, notice = _build_bundle(pid)
+    except ImportError as exc:
+        return jsonify(error=str(exc)), 501
+    resp = send_file(
+        buf,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=name,
+    )
+    resp.headers.update(_notice_headers(notice))
+    return resp
+
+
+def _build_bundle(pid):
+    """(zip buffer, file name, fallback notice or None) for the project.
+    Raises ImportError with a message for the user when a package is missing."""
+    data, entry = _export_snapshot(pid)
+    try:
+        report, notice = _report_buffer(data, pid, entry)
+    except ImportError:
+        raise ImportError("python-docx not installed") from None
     name = entry.get("name") or pid
     try:
         bundle = _export_bundle()
     except (ImportError, OSError) as exc:
         print(f"[sitescribe] export bundle unavailable: {exc!r}", file=sys.stderr)
-        return jsonify(error=f"photo/plan export unavailable: {exc}"), 501
-
-    buf = bundle.build_zip(data, report, name=name,
+        raise ImportError(f"photo/plan export unavailable: {exc}") from None
+    buf = bundle.build_zip(data, report.getvalue(), name=name,
                            item_dir=lambda item_id: item_dir(item_id, pid),
                            plans_dir=plans_dir(pid))
-    return send_file(
-        buf,
-        mimetype="application/zip",
-        as_attachment=True,
-        download_name=f"{bundle.folder_name(name)}.zip",
-    )
+    return buf, f"{bundle.folder_name(name)}.zip", notice
+
+
+def export_file(pid=None):
+    pid = pid or current_pid()
+    return os.path.join(project_data_dir(pid), "export.zip")
+
+
+@app.route("/api/export/build", methods=["POST"])
+@require_pin
+@require_project
+def api_export_build():
+    """Build the bundle and keep it as the project's latest export, so the
+    page can show progress and errors (fetch) and then download a file from
+    disk by plain navigation, which works the same in every phone browser.
+    Returns where to download it and the fallback notice, if any."""
+    pid = current_pid()
+    started = time.time()
+    try:
+        buf, name, notice = _build_bundle(pid)
+    except ImportError as exc:
+        return jsonify(error=str(exc)), 501
+    path = export_file(pid)
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as fh:
+        fh.write(buf.getvalue())
+    os.replace(tmp, path)
+    with open(path + ".json", "w", encoding="utf-8") as fh:
+        json.dump({"name": name, "built": _now()}, fh)
+    return jsonify(url="/api/export/download", name=name, notice=notice,
+                   bytes=os.path.getsize(path), seconds=round(time.time() - started, 1))
+
+
+@app.route("/api/export/download")
+@require_pin
+@require_project
+def api_export_download():
+    """The latest bundle built by /api/export/build."""
+    pid = current_pid()
+    path = export_file(pid)
+    if not os.path.exists(path):
+        raise ApiError("no export built yet", 404)
+    name = "site_visit_report.zip"
+    try:
+        with open(path + ".json", encoding="utf-8") as fh:
+            name = json.load(fh).get("name") or name
+    except (OSError, ValueError):
+        pass
+    return send_file(path, mimetype="application/zip", as_attachment=True,
+                     download_name=name, conditional=False, max_age=0)
 
 
 # ---------------------------------------------------------------- errors
