@@ -30,6 +30,7 @@ Plain HTTP on a LAN IP **silently** blocks the microphone.
 Item   I-001          include · description · importance · tags · location? · audio?
   └ Photo  I-001-P-01   caption
   └ Photo  I-001-P-02
+  └ Audio  I-001-A-01   kept whether or not it was transcribed
 Item   I-002
 ```
 
@@ -47,9 +48,15 @@ Two independent paths, so the app never depends on a paid key:
 1. **Dictate** (primary) — Web Speech API, runs in the browser, **free, no key**.
    Works in Chrome/Android and Safari/iOS 14.5+. Live interim text appears as you
    speak; only finalized text is persisted. Needs HTTPS, which the tunnel provides.
-2. **Record audio** (optional) — uploads the clip; transcribed by Whisper only if
-   `OPENAI_API_KEY` is set. Whisper is ~$0.006/min and handles structural jargon
-   noticeably better.
+2. **Record audio** (optional) — uploads and **keeps** the clip on the server.
+   A per-item checkbox decides whether it is also transcribed:
+   - unchecked (default) → audio is stored and nothing is sent anywhere
+   - checked → Whisper transcribes it, if `OPENAI_API_KEY` is set
+     (~$0.006/min, noticeably better on structural jargon)
+
+   Every recording is kept — `I-001-A-01`, `I-001-A-02`, … — playable inline and
+   individually deletable. Useful when you would rather re-listen on site than
+   trust a transcript.
 
 If neither is available, the phone keyboard's own mic key dictates into the
 description box with no code at all.
@@ -68,7 +75,8 @@ description box with no code at all.
 | `DELETE /api/item/<id>` | remove item + its uploads |
 | `POST /api/item/<id>/photo` | multipart `photo` |
 | `PATCH/DELETE /api/item/<id>/photo/<pid>` | caption / remove |
-| `POST /api/item/<id>/audio` | multipart `audio` → Whisper transcription if a key is set; fills description **only if empty** |
+| `POST /api/item/<id>/audio` | multipart `audio` + `transcribe=true\|false`; always stores the clip, returns it; fills description **only if empty** |
+| `DELETE /api/item/<id>/audio/<clip_id>` | delete one recording |
 | `POST /api/plan` | multipart `plan` (pdf/image) |
 | `GET /api/export/docx` | Word report of **included** items only |
 | `GET /health` | public, no PIN |

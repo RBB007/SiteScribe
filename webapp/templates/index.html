@@ -96,6 +96,15 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 #planHolder{position:relative;touch-action:manipulation}
 #planCanvas{width:100%;display:block;border:1px solid var(--line);border-radius:9px}
 .pin{position:absolute;width:26px;height:26px;margin:-26px 0 0 -13px;pointer-events:none}
+.tx{display:flex;gap:9px;align-items:flex-start;margin-top:10px;
+  font-size:12.5px;color:var(--mut);cursor:pointer}
+.tx input{margin:2px 0 0;flex:0 0 auto;width:17px;height:17px;accent-color:var(--accent)}
+.clip{display:flex;align-items:center;gap:9px;background:var(--card2);
+  border:1px solid var(--line);border-radius:9px;padding:9px;margin-top:9px}
+.clip audio{flex:1;min-width:0;height:34px}
+.clip .id{font-size:11px;color:var(--mut);font-weight:700;flex:0 0 auto}
+.clip button{background:transparent;color:var(--bad);border:0;padding:4px 7px;
+  font-size:17px;line-height:1;flex:0 0 auto}
 .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;
   font-weight:700;color:#fff}
 </style>
@@ -155,10 +164,9 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
     <button id="btnDictate">&#127908; Dictate</button>
     <button class="ghost" id="btnRec">● Record audio</button>
   </div>
-  <div class="row" style="margin-top:7px">
-    <button class="ghost" id="btnPlay" disabled>Play recording</button>
-  </div>
-  <audio id="audio" hidden></audio>
+  <label class="tx"><input type="checkbox" id="txToggle">
+    <span>Transcribe recordings to text (needs an API key — off = keep audio only)</span></label>
+  <div id="clips"></div>
   <div class="msg" id="recMsg"></div>
 </div>
 
@@ -301,11 +309,25 @@ function render(){
     $('locPick').onclick = openPlan;
   }
 
-  /* audio */
-  const has = it.audio && it.audio.filename;
-  $('btnPlay').disabled = !has;
-  if (has) $('audio').src = `/uploads/${it.item_id}/${it.audio.filename}`;
-  $('recMsg').textContent = it.audio?.transcript ? "Transcribed into the description." : "";
+  /* audio clips */
+  renderClips();
+}
+
+function renderClips(){
+  const it = item();
+  const clips = (it && it.audio_clips) || [];
+  $('clips').innerHTML = clips.map(c => `
+    <div class="clip">
+      <span class="id">${c.clip_id}</span>
+      <audio controls preload="none" src="${c.url}"></audio>
+      <button data-id="${c.clip_id}" title="Delete recording">&times;</button>
+    </div>`).join("");
+  [...$('clips').querySelectorAll('button')].forEach(b => b.onclick = async () => {
+    if (!confirm(`Delete recording ${b.dataset.id}?`)) return;
+    await api(`/api/item/${item().item_id}/audio/${b.dataset.id}`, {method:"DELETE"});
+    item().audio_clips = clips.filter(c => c.clip_id !== b.dataset.id);
+    renderClips();
+  });
 }
 
 async function drawThumb(loc){
@@ -442,16 +464,24 @@ $('btnRec').onclick = async () => {
       mr.onstop = async () => {
         s.getTracks().forEach(t=>t.stop());
         const blob = new Blob(chunks,{type:mr.mimeType});
-        const fd = new FormData(); fd.append("audio", blob, "note.webm");
-        $('recMsg').className="msg warn"; $('recMsg').textContent="Transcribing…";
+        const wantText = $('txToggle').checked;
+        const fd = new FormData();
+        fd.append("audio", blob, "note.webm");
+        fd.append("transcribe", wantText ? "true" : "false");
+        $('recMsg').className="msg warn";
+        $('recMsg').textContent = wantText ? "Uploading and transcribing…" : "Saving recording…";
         try{
           const r = await api(`/api/item/${item().item_id}/audio`, {method:"POST", body:fd});
-          item().audio = {filename:"", transcript:r.transcript};
+          (item().audio_clips ||= []).push(r.clip);
           if (r.description){ item().description = r.description; $('desc').value = r.description; }
-          $('recMsg').className = "msg " + (r.transcript ? "ok" : "warn");
+          renderClips();
+          const kb = (r.clip.bytes/1024).toFixed(0);
+          $('recMsg').className = "msg ok";
           $('recMsg').textContent = r.transcript
-            ? "Transcribed into the description."
-            : "Audio saved. No server transcription — use Dictate, or the mic key on your keyboard.";
+            ? `Saved ${r.clip.clip_id} (${kb} KB) and transcribed into the description.`
+            : wantText
+              ? `Saved ${r.clip.clip_id} (${kb} KB). No transcript — no API key set; use Dictate for text.`
+              : `Saved ${r.clip.clip_id} (${kb} KB). Audio kept, not transcribed.`;
         }catch(err){ $('recMsg').className="msg bad"; $('recMsg').textContent=err.message; }
       };
       mr.start(); rec=true; $('btnRec').textContent="■ Stop";
@@ -462,7 +492,6 @@ $('btnRec').onclick = async () => {
     }
   } else { mr.stop(); rec=false; $('btnRec').textContent="● Record"; }
 };
-$('btnPlay').onclick = () => $('audio').play();
 
 /* ---------------- plans ---------------- */
 $('btnPlans').onclick = () => $('planInput').click();

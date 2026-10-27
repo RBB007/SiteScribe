@@ -147,6 +147,17 @@ def load():
         return _blank()
     data.setdefault("items", [])
     data.setdefault("plans", [])
+    # backfill fields added after some records were written, so an older
+    # visit.json never 500s or silently drops data
+    for it in data["items"]:
+        it.setdefault("audio_clips", [])
+        it.setdefault("photos", [])
+        it.setdefault("tags", [])
+        it.setdefault("include", True)
+        it.setdefault("importance", "Info")
+        it.setdefault("description", "")
+        it.setdefault("location", None)
+        it.setdefault("audio", None)
     return data
 
 
@@ -269,6 +280,7 @@ def api_item_create():
             "tags": [],
             "location": None,
             "audio": None,
+            "audio_clips": [],
             "created": _now(),
             "photos": [],
         }
@@ -433,27 +445,66 @@ def api_audio(item_id):
     if not f or not f.filename:
         raise ApiError("no audio uploaded")
 
+    # "false"/"0"/"no" means: keep the recording, do not send it anywhere
+    want_text = str(request.form.get("transcribe", "true")).lower() not in ("false", "0", "no")
+
     with _lock:
         data = load()
         item = need_item(data, item_id)
         safe = secure_filename(f.filename) or "audio.webm"
-        filename = f"{item_id}_audio_{safe}"
+        # keep every recording: <item>_audio_01_<name>
+        existing = item.get("audio_clips") or []
+        seq = f"{len(existing) + 1:02d}"
+        filename = f"{item_id}_audio_{seq}_{safe}"
         d = item_dir(item_id)
         os.makedirs(d, exist_ok=True)
         path = os.path.join(d, filename)
         f.save(path)
+        size = os.path.getsize(path)
 
     # transcription can take many seconds — do it outside the lock
-    transcript = transcribe(path)
+    transcript = transcribe(path) if want_text else ""
 
     with _lock:
         data = load()
         item = need_item(data, item_id)
+        clip = {
+            "clip_id": f"{item_id}-A-{seq}",
+            "filename": filename,
+            "url": f"/uploads/{item_id}/{filename}",
+            "bytes": size,
+            "transcript": transcript,
+            "created": _now(),
+        }
+        item.setdefault("audio_clips", []).append(clip)
+        # keep the legacy single-audio field pointing at the most recent clip
         item["audio"] = {"filename": filename, "transcript": transcript}
         if transcript and not (item.get("description") or "").strip():
             item["description"] = transcript
         save(data)
-        return jsonify(transcript=transcript, description=item.get("description", ""))
+        return jsonify(clip=clip, transcript=transcript,
+                       description=item.get("description", ""))
+
+
+@app.route("/api/item/<item_id>/audio/<clip_id>", methods=["DELETE"])
+@require_pin
+def api_audio_delete(item_id, clip_id):
+    with _lock:
+        data = load()
+        item = need_item(data, item_id)
+        clips = item.get("audio_clips") or []
+        hit = next((c for c in clips if c["clip_id"] == clip_id), None)
+        if hit is None:
+            raise ApiError(f"no such clip: {clip_id}", 404)
+        clips.remove(hit)
+        try:
+            os.remove(os.path.join(item_dir(item_id), hit["filename"]))
+        except OSError:
+            pass
+        item["audio"] = ({"filename": clips[-1]["filename"],
+                          "transcript": clips[-1]["transcript"]} if clips else None)
+        save(data)
+        return jsonify(ok=True)
 
 
 # ---------------------------------------------------------------- plans
