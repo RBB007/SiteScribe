@@ -240,3 +240,91 @@ def test_real_gfds_report_as_template(tmp_path, name):
     header = " ".join(p.text for s in doc.sections for p in s.header.paragraphs)
     assert "Hackathon Site Visit" in header and "October 27, 2026" in header and "April" not in header
     assert _pictures(doc) == 4
+
+
+# --------------------------------------------------------- review fixes (#37)
+
+def _header_doc(path: Path, lines) -> Path:
+    """A firm report whose running header has the given plain lines, in
+    order; a line given as a tuple is one paragraph with a line break between
+    its parts."""
+    doc = Document(str(_firm_report(path)))
+    header = doc.sections[0].header
+    for p in list(header.paragraphs):
+        p._p.getparent().remove(p._p)
+    for line in lines:
+        p = header.add_paragraph()
+        if isinstance(line, tuple):
+            for i, part in enumerate(line):
+                if i:
+                    p.add_run().add_break()
+                p.add_run(part)
+        else:
+            p.add_run(line)
+    doc.save(str(path))
+    return path
+
+
+def test_empty_description_writes_no_placeholder(tmp_path):
+    project = _project(tmp_path, observations=[Observation(description="", number=7)])
+    doc = Document(str(word_report.build_report(project, tmp_path / "r.docx")))
+    texts = [p.text for p in doc.paragraphs]
+    assert "ITEM 7\t" in texts
+    assert "(no description)" not in _text(doc)
+
+
+def test_header_line_next_to_the_date_becomes_the_project_and_the_rest_stays(tmp_path):
+    tpl = _header_doc(tmp_path / "h.docx", ["ACME Engineers", "99 Green St", "April 17, 2026", "Structural"])
+    doc = Document(str(word_report.build_report(_project(tmp_path, template_path=tpl), tmp_path / "r.docx")))
+    assert [p.text for p in doc.sections[0].header.paragraphs] == \
+        ["ACME Engineers", "Hackathon Site Visit", "October 27, 2026", "Structural"]
+    # no line above the date: the nearest below is the project line
+    tpl = _header_doc(tmp_path / "h2.docx", ["April 17, 2026", "99 Green St", "ACME Engineers"])
+    doc = Document(str(word_report.build_report(_project(tmp_path, template_path=tpl), tmp_path / "r2.docx")))
+    assert [p.text for p in doc.sections[0].header.paragraphs] == \
+        ["October 27, 2026", "Hackathon Site Visit", "ACME Engineers"]
+
+
+def test_date_after_a_line_break_is_replaced_in_place(tmp_path):
+    tpl = _header_doc(tmp_path / "h.docx", [("99 Green St", "Visit of April 17, 2026")])
+    doc = Document(str(word_report.build_report(_project(tmp_path, template_path=tpl), tmp_path / "r.docx")))
+    assert [p.text for p in doc.sections[0].header.paragraphs] == ["99 Green St\nVisit of October 27, 2026"]
+
+
+def test_only_a_date_on_its_own_line_above_the_items_is_the_report_date(tmp_path):
+    tpl = _firm_report(tmp_path / "f.docx")
+    doc = Document(str(tpl))
+    first = doc.paragraphs[0]
+    first.insert_paragraph_before("Drawings dated 3/4/25 were used.")
+    first.insert_paragraph_before("April 17, 2026")
+    doc.save(str(tpl))
+    out = Document(str(word_report.build_report(_project(tmp_path, template_path=tpl), tmp_path / "r.docx")))
+    texts = [p.text for p in out.paragraphs]
+    assert "Drawings dated 3/4/25 were used." in texts
+    assert "October 27, 2026" in texts and "April 17, 2026" not in texts
+
+
+def test_heading_without_item_paragraphs_is_a_styles_template(tmp_path):
+    doc = Document()
+    doc.add_paragraph("Specific Items Observed")
+    doc.add_paragraph("End of Report")
+    doc.save(str(tmp_path / "form.docx"))
+    assert word_report.template_kind(tmp_path / "form.docx") == "styles"
+    # and build_report then writes its own layout into it rather than failing
+    project = _project(tmp_path, template_path=tmp_path / "form.docx")
+    out = Document(str(word_report.build_report(project, tmp_path / "r.docx")))
+    assert "Discontinued studs at window" in _text(out)
+
+
+def test_old_items_after_an_unindented_line_are_removed_too(tmp_path):
+    tpl = _firm_report(tmp_path / "f.docx")
+    doc = Document(str(tpl))
+    anchor = next(p for p in doc.paragraphs if p.text.startswith("ITEM 2.2"))
+    anchor.insert_paragraph_before("Level 2")          # a sub-heading with no indent
+    doc.save(str(tpl))
+    out = Document(str(word_report.build_report(_project(tmp_path, template_path=tpl), tmp_path / "r.docx")))
+    text = _text(out)
+    for gone in ("Level 2", "ITEM 2.2", "Old wall evaluated", "will review the detail"):
+        assert gone not in text, gone
+    assert "End of Report" in text and "Previous Action Items" not in text
+    assert _pictures(out) == 4

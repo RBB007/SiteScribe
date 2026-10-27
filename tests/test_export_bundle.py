@@ -277,3 +277,55 @@ def test_build_writes_the_zip_to_disk_and_the_report_uses_the_template(client, t
     assert "End of Report" in text
     assert "Old item text" not in text and "will review it" not in text
     assert "Site Visit Report" not in text          # not the generic layout
+
+
+# --------------------------------------------------------- review fixes (#37)
+
+def _webp(size=(3000, 2000)):
+    buf = io.BytesIO()
+    Image.new("RGB", size, "navy").save(buf, "WEBP")
+    buf.seek(0)
+    return buf
+
+
+def test_other_formats_come_out_as_jpeg_named_jpg(client):
+    item_id, photo_id = _item(client)
+    _details(client, item_id, photo_id, description="Web photo", importance="Minor")
+    client.post(f"/api/item/{item_id}/photo", content_type="multipart/form-data",
+                data={"photo": (_webp(), "IMG_9.webp"), "photo_id": photo_id})
+    small_item, small_id = _item(client)
+    client.post(f"/api/item/{small_item}/photo", content_type="multipart/form-data",
+                data={"photo": (_webp((300, 200)), "IMG_10.webp"), "photo_id": small_id})
+
+    _, zf = _export(client)
+
+    names = sorted(n.split("/", 2)[-1] for n in zf.namelist() if "/photos/" in n)
+    assert names == [f"{photo_id}_IMG_9.jpg", f"{small_id}_IMG_10.jpg"]
+    for name in names:
+        with Image.open(zf.open(f"Elm St _ Level 2/photos/{name}")) as image:
+            assert image.format == "JPEG"
+    assert _record(zf, f"Elm St _ Level 2/photos/{names[0]}")["description"] == "Web photo"
+
+
+def test_bundle_route_serves_the_latest_export_from_disk(client):
+    item_id, photo_id = _item(client)
+    _details(client, item_id, photo_id, description="One", importance="Minor")
+    _photo(client, item_id, "IMG_1.jpg", "red")
+    r, zf = _export(client)
+    path = Path(server.export_file(server.load_index()["projects"][0]["project_id"]))
+    assert path.is_file() and not Path(str(path) + ".tmp").exists()
+    assert zipfile.ZipFile(path).namelist() == zf.namelist()
+    assert client.get("/api/export/download").status_code == 200
+
+
+def test_bundle_says_when_photos_and_plans_are_left_out(client, monkeypatch):
+    item_id, photo_id = _item(client)
+    _details(client, item_id, photo_id, description="One", importance="Minor")
+    _photo(client, item_id, "IMG_1.jpg", "red")
+    monkeypatch.setattr(server, "_build_project",
+                        lambda *a, **k: (None, "the visit could not be converted (boom)"))
+    r, zf = _export(client)
+    notice = r.headers["X-SiteScribe-Report-Notice"]
+    assert "could not be converted" in notice and "photos and plan pages were left out" in notice
+    assert [n for n in zf.namelist() if "/photos/" in n or "/plans/" in n] == []
+    assert any(n.endswith("site_visit_report.docx") for n in zf.namelist())

@@ -92,7 +92,8 @@ dictated in the app, or comes from the template file itself. The upload reply
 will use the file (`layout`):
 
 - **`report`** — a past report, e.g. a GFDS *Structural Observation Record*
-  (anything with `ITEM n` paragraphs or a "Specific Items Observed" heading).
+  (anything with `ITEM n` paragraphs; a form with the headings but no items
+  is `styles`, since the ITEM blocks are cloned from those paragraphs).
   The document is kept as the form it is: title, header table, section labels
   and the firm's closing paragraphs stay. The date, project name and the
   other header fields are filled from the app and left **blank** when the app

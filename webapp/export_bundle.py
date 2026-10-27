@@ -19,7 +19,6 @@ is a fifth the size. The originals stay on the server.
 
 from __future__ import annotations
 
-import io
 import re
 import shutil
 import sys
@@ -38,6 +37,7 @@ from sitescribe.models import Observation, Project
 PHOTO_MAX_PX = 2560
 _JPEG_QUALITY = 88
 _HEIC = {".heic", ".heif"}
+_KEEP = {".jpg", ".jpeg", ".png"}     # formats a shrunk copy keeps; anything else comes out as JPEG
 
 
 def write_zip(project: Project | None, report_docx: bytes, *, name: str,
@@ -71,13 +71,6 @@ def write_zip(project: Project | None, report_docx: bytes, *, name: str,
     return out_path
 
 
-def build_zip(project: Project | None, report_docx: bytes, *, name: str, work_dir: Path) -> io.BytesIO:
-    """The same zip in memory, for the one-request /api/export/bundle route."""
-    path = write_zip(project, report_docx, name=name, out_path=Path(work_dir) / "bundle.zip",
-                     work_dir=work_dir)
-    return io.BytesIO(path.read_bytes())
-
-
 def _photo_paths(obs: Observation) -> list[Path]:
     paths = list(obs.photos) or ([obs.photo_path] if obs.photo_path else [])
     out, seen = [], set()
@@ -91,10 +84,12 @@ def _photo_paths(obs: Observation) -> list[Path]:
 
 def tagged_copy(obs: Observation, photo: Path, out_dir: Path) -> Path:
     """A copy of `photo` in out_dir, downscaled to PHOTO_MAX_PX and with the
-    entry written into its EXIF. HEIC comes out as JPEG so it opens anywhere;
-    a JPEG that is already small keeps its original pixels."""
+    entry written into its EXIF. JPEG and PNG keep their format; anything
+    else (HEIC, WEBP, TIFF, ...) comes out as a JPEG named .jpg so the file
+    opens anywhere and its name says what it is. A JPEG or PNG that is
+    already small keeps its original bytes."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / (photo.stem + ".jpg" if photo.suffix.lower() in _HEIC else photo.name)
+    out = out_dir / (photo.name if photo.suffix.lower() in _KEEP else photo.stem + ".jpg")
     _shrink(photo, out)
     # the EXIF record names this photo's own caption, as the report does
     caption = (obs.captions.get(photo.name) or "").strip()
@@ -116,7 +111,7 @@ def _shrink(src: Path, out: Path) -> None:
         register_heif_opener()
     with Image.open(src) as im:
         small = max(im.size) <= PHOTO_MAX_PX
-        if small and src.suffix.lower() not in _HEIC:
+        if small and src.suffix.lower() in _KEEP:
             shutil.copyfile(src, out)      # nothing to gain from re-encoding
             return
         upright = ImageOps.exif_transpose(im)

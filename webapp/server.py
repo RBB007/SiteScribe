@@ -1397,20 +1397,16 @@ def _export_bundle():
 @require_project
 def api_export_bundle():
     """A zip of one folder: the Word report, photos/ with each entry written
-    into the photo's EXIF, and plans/ with every pinned plan page."""
+    into the photo's EXIF, and plans/ with every pinned plan page. Built as
+    the project's latest export (the same file /api/export/build makes) and
+    served from disk, so the zip is never held in memory."""
     pid = current_pid()
     try:
-        with tempfile.TemporaryDirectory() as tmp:
-            name, notice = _write_bundle(pid, os.path.join(tmp, "bundle.zip"))
-            buf = io.BytesIO(Path(tmp, "bundle.zip").read_bytes())
+        path, name, notice = _build_export(pid)
     except ImportError as exc:
         return jsonify(error=str(exc)), 501
-    resp = send_file(
-        buf,
-        mimetype="application/zip",
-        as_attachment=True,
-        download_name=name,
-    )
+    resp = send_file(path, mimetype="application/zip", as_attachment=True,
+                     download_name=name, conditional=False, max_age=0)
     resp.headers.update(_notice_headers(notice))
     return resp
 
@@ -1432,9 +1428,34 @@ def _write_bundle(pid, out_path):
             report, notice, project = _report_and_project(data, pid, entry, tmp)
         except ImportError:
             raise ImportError("python-docx not installed") from None
+        if project is None:
+            # the zip can only hold what the Project carries: say so, rather
+            # than hand over a bundle that silently lacks the photos and plans
+            notice = f"{notice}; the photos and plan pages were left out of the zip"
         bundle.write_zip(project, report.getvalue(), name=name,
                          out_path=Path(out_path), work_dir=Path(tmp) / "bundle")
     return f"{bundle.folder_name(name)}.zip", notice
+
+
+def _build_export(pid):
+    """Build the project's bundle as its latest export (export.zip beside the
+    visit, with a .json naming it); (path, file name, notice). Written to a
+    .tmp beside it and renamed in, so a download never sees a half-built
+    file. Raises ImportError with a message for the user when a package is
+    missing."""
+    path = export_file(pid)
+    tmp = path + ".tmp"
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    try:
+        name, notice = _write_bundle(pid, tmp)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+    os.replace(tmp, path)
+    with open(path + ".json", "w", encoding="utf-8") as fh:
+        json.dump({"name": name, "built": _now()}, fh)
+    return path, name, notice
 
 
 def export_file(pid=None):
@@ -1452,16 +1473,10 @@ def api_export_build():
     Returns where to download it and the fallback notice, if any."""
     pid = current_pid()
     started = time.time()
-    path = export_file(pid)
-    tmp = path + ".tmp"
-    os.makedirs(os.path.dirname(path), exist_ok=True)
     try:
-        name, notice = _write_bundle(pid, tmp)
+        path, name, notice = _build_export(pid)
     except ImportError as exc:
         return jsonify(error=str(exc)), 501
-    os.replace(tmp, path)
-    with open(path + ".json", "w", encoding="utf-8") as fh:
-        json.dump({"name": name, "built": _now()}, fh)
     return jsonify(url="/api/export/download", name=name, notice=notice,
                    bytes=os.path.getsize(path), seconds=round(time.time() - started, 1))
 

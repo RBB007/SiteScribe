@@ -22,8 +22,8 @@ which one a file gets):
   sized 2.92" tall (one portrait), 4.3" wide (one landscape) or 2.58" tall
   (two side by side).
 
-* The firm's own report (a .docx with "ITEM n" paragraphs or a "Specific
-  Items Observed" heading, e.g. a past Structural Observation Record): the
+* The firm's own report (a .docx with "ITEM n" paragraphs, e.g. a past
+  Structural Observation Record): the
   document is kept as the form it is. Its header table, section labels and
   closing paragraphs stay; the date, project and other header fields are
   filled in (blank when the project has no value, never the old report's),
@@ -895,9 +895,10 @@ _HEADER_FIELDS = (
 
 def template_kind(template: Path) -> str:
     """How build_report will use a template: "tagged" (Jinja tags, rendered
-    with docxtpl), "report" (a firm report with ITEM paragraphs or a
-    "Specific Items Observed" heading: kept and refilled) or "styles" (any
-    other .docx: body replaced, page setup and styles kept)."""
+    with docxtpl), "report" (a firm report with "ITEM n" paragraphs: kept and
+    refilled, the ITEM blocks cloned from those paragraphs) or "styles" (any
+    other .docx, a form with headings but no items included: body replaced,
+    page setup and styles kept)."""
     _require("docx", "python-docx")
     from docx import Document
 
@@ -908,8 +909,9 @@ def template_kind(template: Path) -> str:
 
 
 def _is_firm_report(doc) -> bool:
-    return any(_ITEM_RE.match(_el_text(el)) or _ITEMS_HEADING_RE.match(_el_text(el))
-               for el in _body_elements(doc))
+    """True when the body has an "ITEM n" paragraph: the one thing the form
+    path cannot do without, since every new block is cloned from it."""
+    return any(_ITEM_RE.match(_el_text(el)) for el in _body_elements(doc))
 
 
 def _build_from_firm_report(project: Project, entries: list[_Entry],
@@ -1026,18 +1028,26 @@ def _is_block_content(el) -> bool:
 
 def _items_region(els: list) -> tuple[int, int]:
     """[start, end) of the ITEM blocks: everything after the "Specific Items
-    Observed" heading (or from the first ITEM paragraph) up to the next
-    paragraph that is not block content (Previous Action Items, the closing
-    text, End of Report)."""
+    Observed" heading (or from the first ITEM paragraph) up to the first
+    paragraph after the last ITEM that is not block content (Previous Action
+    Items, the closing text, End of Report). Scanning from the last ITEM, not
+    the first, means an unindented line inside the old items (a sub-heading,
+    a description that wrapped into its own paragraph) does not end the
+    region early and leave the old report's later items in the document."""
     start = None
     for i, el in enumerate(els):
         if _ITEMS_HEADING_RE.match(_el_text(el)):
             start = i + 1
             break
+    items = [i for i, el in enumerate(els) if _ITEM_RE.match(_el_text(el))]
     if start is None:
-        start = next(i for i, el in enumerate(els) if _ITEM_RE.match(_el_text(el)))
-    end = len(els)
-    for i in range(start, len(els)):
+        start = items[0]
+    # "Previous Action Items" has ITEM lines of its own: the region never
+    # reaches past its heading
+    limit = next((i for i in range(start, len(els)) if _PREVIOUS_RE.match(_el_text(els[i]))), len(els))
+    last = max([i for i in items if start <= i < limit], default=start)
+    end = limit
+    for i in range(last, limit):
         if not _is_block_content(els[i]):
             end = i
             break
@@ -1116,7 +1126,7 @@ def _fill_header_fields(doc, head: list, project: Project) -> None:
 
 
 def _fill_field(p, next_cell, project: Project, opts: dict) -> None:
-    text = p.text
+    text = _el_text(p._p)      # positions as _replace_span counts them, not Paragraph.text's
     for label, value_of in _HEADER_FIELDS:
         m = re.match(rf"^\s*(?:{label})\s*:(.*)$", text, re.I | re.S)
         if not m:
@@ -1134,24 +1144,45 @@ def _fill_field(p, next_cell, project: Project, opts: dict) -> None:
 
 
 def _fill_dates(doc, head: list, project: Project) -> None:
-    """Every date written in the running headers and footers and above the
-    items becomes the visit date, long or short to match what was there.
+    """Dates in the running headers and footers become the visit date, long
+    or short to match what was there. Above the items only a date that
+    stands on its own line (or after a "Date:" label) is the report date and
+    is swapped; a date inside other text ("Drawings dated 3/4/25") is left as
+    it is, since it may well not be this visit's.
 
-    A running header that carries the report date is per-report, so its
-    other plain text lines (no fields, no pictures: the old report's project
-    line) become this project's name. A header with no date, e.g. just the
-    firm's name, is left alone."""
+    A running header that carries the report date is per-report, so the
+    plain text line next to the date (no fields, no pictures: the old
+    report's project line, the nearest one above the date, else the nearest
+    below) becomes this project's name. Any other plain line in that header,
+    and a header with no date at all, e.g. just the firm's name, is left
+    alone."""
     from docx.oxml.ns import qn
 
     long_date, short_date = _long_date(project), f"{project.visit_date:%m/%d/%y}"
 
-    def swap_dates(p) -> bool:
-        hit = False
-        for pattern, value in ((_LONG_DATE_RE, long_date), (_SHORT_DATE_RE, short_date)):
-            for m in reversed(list(pattern.finditer(p.text))):
-                _replace_span(p, m.start(), m.end(), value)
-                hit = True
-        return hit
+    def dates_in(p):
+        text = _el_text(p._p)      # positions as _replace_span counts them
+        return text, [(m, value) for pattern, value in ((_LONG_DATE_RE, long_date),
+                                                        (_SHORT_DATE_RE, short_date))
+                      for m in pattern.finditer(text)]
+
+    def swap_dates(p, *, alone: bool = False) -> bool:
+        text, found = dates_in(p)
+        if not found:
+            return False
+        if alone:
+            rest = text
+            for m, _ in found:
+                rest = rest.replace(m.group(), "")
+            if rest.strip() and not re.match(r"^\s*Date\s*:\s*$", rest, re.I):
+                return False
+        for m, value in sorted(found, key=lambda mv: -mv[0].start()):
+            _replace_span(p, m.start(), m.end(), value)
+        return True
+
+    def plain(p) -> bool:
+        return bool(_el_text(p._p).strip()) and not _has_picture(p._p) \
+            and not p._p.xpath('.//w:fldChar | .//w:fldSimple | .//w:instrText')
 
     for section in doc.sections:
         for part in (section.header, section.footer, section.first_page_header,
@@ -1163,14 +1194,15 @@ def _fill_dates(doc, head: list, project: Project) -> None:
             dated = [swap_dates(p) for p in paras]
             if not any(dated) or part._element.tag != qn("w:hdr"):
                 continue
-            for p, is_date in zip(paras, dated):
-                if is_date or not p.text.strip() or _has_picture(p._p) \
-                        or p._p.xpath('.//w:fldChar | .//w:fldSimple | .//w:instrText'):
-                    continue
-                _set_text(p, project.name)
+            first = dated.index(True)
+            above = [p for p in paras[:first] if plain(p)]
+            below = [p for p, d in zip(paras[first + 1:], dated[first + 1:]) if plain(p) and not d]
+            line = above[-1] if above else below[0] if below else None
+            if line is not None:
+                _set_text(line, project.name)
     for el in head:
         for p_el in el.iter(qn("w:p")):
-            swap_dates(_para(doc, p_el))
+            swap_dates(_para(doc, p_el), alone=True)
 
 
 def _fill_section(doc, els: list, label_re, stop: int, texts: list[str], *, clear: bool) -> None:
@@ -1269,7 +1301,7 @@ class _FormWriter:
         o = e.obs
         self.blank()
         self._add(self.protos.item, [(f"ITEM {e.label}", True),
-                                     ("\t" + (o.description.strip() or "(no description)"), None)])
+                                     ("\t" + o.description.strip(), None)])
         sev = _sev(o)
         p = self._add(self.protos.action, [("Severity:\t", None)])
         run = p.add_run(sev.value)
