@@ -34,6 +34,30 @@ To use it on a phone, connect the phone to the same Wi-Fi and open the **Network
 
 API keys go in a `.env` file or environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`), never in code.
 
+## Using an AI coding agent?
+
+Give it [AI_INSTRUCTIONS.md](AI_INSTRUCTIONS.md). It explains the one rule that matters (keep the function signatures and the data model exactly as they are) so your code drops into the app without rework.
+
+## The app (`app.py`)
+
+Three screens, picked at the top: **Setup**, **Capture**, **Report**.
+
+Capture is the phone screen. Big buttons start an entry (take/select photo, pick a location on the plan, or a text/voice note), then the entry editor shows:
+
+```
+<prev>  Item #  <next>
+photo(s)                 take/select photo button if none
+<prev>  Photo #  <next>
+location                 pick-on-plan button if none
+description              typed, and/or a voice note
+importance flag          Info / Minor / Major / Critical / Safety
+tags, action item
+```
+
+Report has the AI draft button, the summary, an export options dialog, and the export button. The Word report and marked-up plan set come from `word_report.py` and `plan_markup.py`; photo info is embedded by `photos.py`.
+
+Every module call goes through `try_step()`, so a module that isn't written yet shows "not built yet" instead of breaking the app. A sample grid plan sheet is built in (Setup tab) so the location picker can be tried before `plans.py` exists.
+
 ## Code layout
 
 The app (`app.py`) only calls functions in the `sitescribe/` package. Each module has its functions already defined with a docstring saying exactly what goes in and what comes out — fill in the body. Until a module is written the app says "not built yet" instead of crashing, so the app runs from day one.
@@ -49,13 +73,13 @@ The app (`app.py`) only calls functions in the `sitescribe/` package. Each modul
 | `sitescribe/ai_writer.py` | after | AI summary, cleaned-up captions, action items | |
 | `sitescribe/plan_markup.py` | after | Plan set PDF with color-coded numbered pins | |
 | `sitescribe/word_report.py` | after | The Word report | |
-| `app.py` | all | Phone-friendly Streamlit UI | |
+| `app.py` | all | Phone-friendly Streamlit UI | RBB007 |
 
 ## Team
 
 | Name | GitHub | Working on |
 | --- | --- | --- |
-| | [@RBB007](https://github.com/RBB007) | Repo manager, integration |
+| | [@RBB007](https://github.com/RBB007) | Repo manager, integration, app UI |
 | | [@tshoseints](https://github.com/tshoseints) | Merger |
 | | [@allenmarden](https://github.com/allenmarden) | Merger |
 | | [@Markr78-CT](https://github.com/Markr78-CT) | |

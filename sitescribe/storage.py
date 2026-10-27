@@ -46,6 +46,7 @@ def load_project(path: Path) -> Project:
         template_path=_path(data["template_path"]),
         observations=[_observation(o) for o in data["observations"]],
         summary=data["summary"],
+        report_options=data.get("report_options", {}),
     )
 
 
@@ -81,6 +82,7 @@ def _sheet(d: dict) -> PlanSheet:
 def _observation(d: dict) -> Observation:
     return Observation(
         photo_path=_path(d["photo_path"]),
+        photos=[Path(p) for p in d.get("photos", [])],
         audio_path=_path(d["audio_path"]),
         description=d["description"],
         severity=Severity(d["severity"]),

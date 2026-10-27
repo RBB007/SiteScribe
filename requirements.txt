@@ -1,5 +1,5 @@
 # App
-streamlit>=1.40
+streamlit>=1.47
 streamlit-image-coordinates>=0.1.9
 pillow>=10.0
 
