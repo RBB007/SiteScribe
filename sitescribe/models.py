@@ -95,6 +95,11 @@ class Observation:
     gps: GeoPoint | None = None
     taken_at: datetime = field(default_factory=datetime.now)
     number: int = 0           # photo number in the report (1, 2, 3...)
+    include: bool = True      # False = captured but left out of the report
+    # Per-photo captions for observations with more than one photo, keyed by
+    # the photo path as a string (str(photo)). Photos without an entry fall
+    # back to `description`.
+    captions: dict[str, str] = field(default_factory=dict)
     id: str = field(default_factory=_new_id)
 
 
