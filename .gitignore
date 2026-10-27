@@ -227,3 +227,14 @@ projects/
 *.mov
 *.m4a
 *.wav
+
+# Claude desktop app session files
+.claude/
+
+# macOS folder icon files
+Icon\r
+Icon?
+
+# SiteScribe web app: site data and uploads stay out of git
+webapp/data/
+webapp/uploads/

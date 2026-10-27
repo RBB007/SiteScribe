@@ -1,13 +1,19 @@
-# App
-streamlit>=1.40
-streamlit-image-coordinates>=0.1.9
+# Web app (webapp/). Run from the repo root with:  python run.py
+# The live server installs webapp/requirements.txt (see DEPLOY.md); keep the two in step.
+flask>=3.0
+gunicorn>=21.0       # webapp: production server on the live deploy
+requests>=2.31       # webapp: Whisper fallback until voice.py lands
+python-docx>=1.1     # webapp: Word export fallback; also word_report.py
+pypdf>=4.0           # webapp: plan page count (PDF.js renders pages in the browser)
 pillow>=10.0
+
+# Modules
+piexif>=1.1.3        # photos.py: read photo GPS/time, write observation info into the photo
 
 # Add what your module needs below, with a comment saying which module.
 # plans.py / plan_markup.py:  pymupdf
-# photos.py:                  piexif
 # voice.py:                   openai
 # ai_writer.py:               anthropic
-# word_report.py:             python-docx
+# word_report.py:             python-docx (already above)
 
 pytest

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SiteScribe</title>
+<style>
+:root{
+  --bg:#fff;--fg:#14181d;--mut:#667085;--line:#e4e7ec;--card:#f9fafb;--card2:#f2f4f7;
+  --accent:#1554b8;--accent-fg:#fff;--ok:#067647;--bad:#b42318;--warn:#b54708;
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --bg:#0e1216;--fg:#e8eaed;--mut:#98a2b3;--line:#262c33;--card:#161a1f;--card2:#1d2227;
+  --accent:#4d8df0;--accent-fg:#06101f;--ok:#5fd09a;--bad:#ff8a80;--warn:#f5b26b;
+}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;
+  padding:0 16px calc(28px + env(safe-area-inset-bottom))}
+.wrap{max-width:560px;margin:0 auto}
+header{padding:30px 0 18px;text-align:center}
+h1{margin:0;font-size:30px;letter-spacing:-.025em}h1 span{color:var(--accent)}
+.tag{color:var(--mut);font-size:14px;margin-top:5px}
+button{font:inherit;border:0;border-radius:10px;background:var(--accent);
+  color:var(--accent-fg);padding:14px 16px;font-weight:600;cursor:pointer}
+button.ghost{background:var(--card2);color:var(--fg);border:1px solid var(--line)}
+button.wide{width:100%}
+.sec{margin-top:22px}
+.sec h2{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);
+  font-weight:700;margin:0 0 10px}
+.new{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:14px}
+input[type=text]{width:100%;padding:13px;border:1px solid var(--line);border-radius:10px;
+  background:var(--bg);color:var(--fg);font:inherit;margin-bottom:10px}
+.hint{font-size:12.5px;color:var(--mut);margin-top:9px}
+.proj{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  background:var(--card);border:1px solid var(--line);border-radius:13px;
+  padding:13px 14px;margin-bottom:10px;cursor:pointer;color:var(--fg)}
+.proj:hover{border-color:var(--accent)}
+.proj .main{flex:1;min-width:0}
+.proj .nm{font-weight:650;font-size:15.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.proj .meta{color:var(--mut);font-size:12.5px;margin-top:3px;font-variant-numeric:tabular-nums}
+.proj .cur{display:inline-block;background:var(--ok);color:#fff;font-size:10px;font-weight:700;
+  padding:2px 7px;border-radius:999px;margin-left:7px;vertical-align:1px;letter-spacing:.04em}
+.proj .go{color:var(--mut);font-size:20px;flex:0 0 auto}
+.kebab{flex:0 0 auto;background:transparent;border:0;color:var(--mut);
+  font-size:19px;padding:6px 9px;border-radius:8px;cursor:pointer}
+.kebab:hover{background:var(--card2);color:var(--fg)}
+.empty{text-align:center;color:var(--mut);padding:26px 16px;background:var(--card);
+  border:1px dashed var(--line);border-radius:13px;font-size:14px}
+.msg{font-size:13px;margin-top:12px;min-height:18px;text-align:center}
+.msg.ok{color:var(--ok)}.msg.bad{color:var(--bad)}.msg.warn{color:var(--warn)}
+footer{text-align:center;color:var(--mut);font-size:12px;padding:26px 0 8px}
+footer a{color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Site<span>Scribe</span></h1>
+  <div class="tag">Photo, voice note, and a pin on the plan — straight to a report.</div>
+</header>
+
+<div class="sec">
+  <h2>Start a new report</h2>
+  <div class="new">
+    <input type="text" id="name" maxlength="120" autocomplete="off"
+           placeholder="Project name (e.g. Oakland Mixed-Use — Roof Framing)">
+    <button class="wide" id="create">+ New report</button>
+    <div class="hint" id="autoHint"></div>
+  </div>
+</div>
+
+<div class="sec">
+  <h2>Open an existing report</h2>
+  <div id="list"></div>
+</div>
+
+<div class="msg" id="msg"></div>
+
+<footer>SiteScribe · NCSEA Summit 2026 · Team 24 · <a href="/logout">Sign out</a></footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let projects = [], current = null;
+
+async function api(path, opts={}){
+  const res = await fetch(path, opts);
+  if (res.status === 401){ location.href = "/login"; throw new Error("unauthorized"); }
+  const ct = res.headers.get("content-type") || "";
+  const body = ct.includes("json") ? await res.json() : await res.text();
+  if (!res.ok) throw new Error(body?.error || res.statusText);
+  return body;
+}
+const say = (t, c="") => { $('msg').className = "msg " + c; $('msg').textContent = t; };
+
+function stamp(){
+  const d = new Date();
+  const p = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function updateHint(){
+  $('autoHint').textContent = $('name').value.trim()
+    ? " "
+    : `Leave blank and it will be named “Site Visit ${stamp()}”.`;
+}
+$('name').oninput = updateHint;
+
+function ago(iso){
+  if (!iso) return "";
+  const s = (Date.now() - new Date(iso).getTime())/1000;
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s/60)} min ago`;
+  if (s < 86400) return `${Math.floor(s/3600)} hr ago`;
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined,{month:"short",day:"numeric"}) + " " +
+         d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"});
+}
+
+function render(){
+  if (!projects.length){
+    $('list').innerHTML =
+      `<div class="empty">No reports yet.<br>Create one above to start capturing.</div>`;
+    return;
+  }
+  $('list').innerHTML = projects.map(p => `
+    <div class="proj" data-id="${p.project_id}">
+      <div class="main">
+        <div class="nm">${esc(p.name)}${p.project_id===current?'<span class="cur">OPEN</span>':''}</div>
+        <div class="meta">${p.items} item${p.items===1?"":"s"} ·
+          ${p.photos} photo${p.photos===1?"":"s"} ·
+          ${p.included} in report · ${ago(p.updated)}</div>
+      </div>
+      <button class="kebab" data-act="rename" title="Rename">&#9998;</button>
+      <button class="kebab" data-act="delete" title="Delete">&#128465;</button>
+      <span class="go">&rsaquo;</span>
+    </div>`).join("");
+
+  [...$('list').querySelectorAll('.proj')].forEach(row => {
+    const id = row.dataset.id;
+    row.onclick = e => {
+      const act = e.target.closest('button')?.dataset.act;
+      if (act === "rename") return rename(id);
+      if (act === "delete") return del(id);
+      open_(id);
+    };
+  });
+}
+const esc = s => String(s).replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function load(){
+  const d = await api('/api/projects');
+  projects = d.projects; current = d.current;
+  render(); updateHint();
+}
+
+$('create').onclick = async () => {
+  const name = $('name').value.trim();
+  $('create').disabled = true; say("Creating…","warn");
+  try{
+    const p = await api('/api/projects', {method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify({name})});
+    location.href = "/capture";
+  }catch(err){ say(err.message,"bad"); $('create').disabled = false; }
+};
+$('name').addEventListener('keydown', e => { if (e.key === "Enter") $('create').click(); });
+
+async function open_(id){
+  say("Opening…","warn");
+  try{ await api(`/api/projects/${id}/open`, {method:"POST"}); location.href = "/capture"; }
+  catch(err){ say(err.message,"bad"); }
+}
+
+async function rename(id){
+  const p = projects.find(x => x.project_id === id);
+  const name = prompt("Rename report:", p.name);
+  if (name === null || !name.trim()) return;
+  try{
+    await api(`/api/projects/${id}`, {method:"PATCH",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify({name: name.trim()})});
+    await load(); say("Renamed.","ok");
+  }catch(err){ say(err.message,"bad"); }
+}
+
+async function del(id){
+  const p = projects.find(x => x.project_id === id);
+  if (!confirm(`Delete “${p.name}”?\n\n${p.items} item(s) and ${p.photos} photo(s) will be permanently removed. This cannot be undone.`)) return;
+  try{
+    await api(`/api/projects/${id}`, {method:"DELETE"});
+    await load(); say("Deleted.","ok");
+  }catch(err){ say(err.message,"bad"); }
+}
+
+load().catch(e => say(e.message,"bad"));
+</script>
+</body>
+</html>
