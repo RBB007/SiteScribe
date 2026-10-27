@@ -92,5 +92,7 @@ def _observation(d: dict) -> Observation:
         gps=_geo(d["gps"]),
         taken_at=datetime.fromisoformat(d["taken_at"]),
         number=d["number"],
+        include=d.get("include", True),
+        captions=dict(d.get("captions", {})),
         id=d["id"],
     )
