@@ -2,6 +2,7 @@
 streamlit>=1.40
 streamlit-image-coordinates>=0.1.9
 pillow>=10.0
+piexif>=1.1.3       # photos.py: read photo GPS/time, write observation info into the photo
 
 # Add what your module needs below, with a comment saying which module.
 # plans.py / plan_markup.py:  pymupdf
