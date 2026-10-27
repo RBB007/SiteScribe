@@ -45,10 +45,10 @@ def embed_observation(obs: Observation, out_path: Path) -> Path:
     severity, tags and description stored in the photo's EXIF/metadata, so the
     info travels with the photo file. Return out_path."""
     piexif = _piexif()
-    if obs.photo_path is None:
-        raise ValueError(f"Observation #{obs.number} has no photo to embed info into")
-    src = Path(obs.photo_path)
     out_path = Path(out_path)
+    src = _source_photo(obs, out_path)
+    if src is None:
+        raise ValueError(f"Observation #{obs.number} has no photo to embed info into")
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     exif = _load_exif(src)
@@ -71,6 +71,16 @@ def embed_observation(obs: Observation, out_path: Path) -> Path:
 
 
 # ---------------------------------------------------------------- writing
+
+def _source_photo(obs: Observation, out_path: Path) -> Path | None:
+    """The photo out_path is a copy of. The app calls embed_observation once per
+    photo with out_path named after it, so pick the photo in obs.photos with the
+    same file name; otherwise the main photo."""
+    for photo in getattr(obs, "photos", None) or []:
+        if Path(photo).name == out_path.name:
+            return Path(photo)
+    return Path(obs.photo_path) if obs.photo_path else None
+
 
 def _write_observation(exif: dict, obs: Observation) -> None:
     piexif = _piexif()

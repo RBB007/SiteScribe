@@ -3,10 +3,10 @@
 A phone-first capture UI built to the **App Workflow** slide and the notebook
 sketch: an Item navigator over a photo, a Photo navigator under it.
 
-> **Note for the team:** `main` is a Streamlit app. This is a standalone Flask
-> implementation of the capture dialog. It is NOT a drop-in replacement — it is
-> here so the UI behaviour, the data model and the Word export are visible and
-> reusable. Take the parts that help.
+> **Note for the team:** this Flask app is the main SiteScribe app. The
+> Streamlit app that used to live on `main` is retired. The `sitescribe/`
+> modules plug in behind these routes; see [INTEGRATION_PLAN.md](../INTEGRATION_PLAN.md).
+> From the repo root, `python run.py` starts this same server.
 
 ## Live
 
