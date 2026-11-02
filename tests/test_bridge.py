@@ -1,6 +1,6 @@
 """bridge.to_project() and the Word export it feeds: capture entries through
 the Flask test client, export /api/export/docx, and check the report is the
-one sitescribe.word_report builds (ITEM lines, photos, pinned plan sheet)."""
+MKA default produced by sitescribe.word_report."""
 
 import io
 import zipfile
@@ -68,6 +68,10 @@ def _text(doc) -> str:
         for row in t.rows:
             parts += [c.text for c in row.cells]
     return "\n".join(parts)
+
+
+def _all_text(doc) -> str:
+    return "\n".join(node.text or "" for node in doc.element.body.iter(qn("w:t")))
 
 
 def _pictures(doc) -> int:
@@ -146,16 +150,15 @@ def test_docx_export_is_the_word_report_module(client):
 
     assert r.status_code == 200
     doc = Document(io.BytesIO(r.data))
-    text = _text(doc)
-    assert "Site Visit Report" in text and "Elm St / Level 2" in text
-    assert "ITEM 1.1\tCracked beam at C-4" in text
-    assert "ITEM 1.2\tRust at base plate" in text
+    text = _all_text(doc)
+    assert "Construction Observation Report" in text and "Elm St / Level 2" in text
+    assert "1.1" in text and "Cracked beam at C-4" in text
+    assert "1.2" in text and "Rust at base plate" in text
     assert "Looking north" in text
-    assert "Location:\tFraming plans, page 2" in text
-    assert "Plan Sheets" in text and "Photo Log" in text
-    assert "Duplicate" not in text and "ITEM 2" not in text
-    # one photo + two pinned plan pages
-    assert _pictures(doc) == 3
+    assert "Location: " in text and "Framing plans, page 2" in text
+    assert "Duplicate" not in text
+    assert len(doc.tables) == 1 and len(doc.tables[0].rows) == 3
+    assert _pictures(doc) == 1
 
 
 def test_docx_export_uses_the_uploaded_template(client):

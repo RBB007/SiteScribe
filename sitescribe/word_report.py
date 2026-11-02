@@ -11,10 +11,15 @@ Report sections, in order:
     5. Action items table            (observations with an action_item)
     6. Photo log: number, time, sheet, severity, short description
 
-Two ways to build, picked by project.template_path:
+Three ways to build, picked by project.template_path:
 
-* No template, or an ordinary .docx (a letterhead, a blank shell, an old
-  report): the template's body is emptied, its page setup, headers, footers
+* No template: the bundled MKA Construction Observation Report is populated.
+  Project fields fill the cover sheet and observations are written into MKA's
+  three-column number / summary / photo table. Optional MKA cover fields are
+  read from report_options (documented below).
+
+* An ordinary .docx (a letterhead, a blank shell, an old report): the
+  template's body is emptied, its page setup, headers, footers
   and styles are kept, and the six sections above are written in with
   python-docx. Layout follows the GFDS Structural Observation Record:
   "ITEM 3.1 <tab> description", a "Location:" and "Action:" line, photos
@@ -36,6 +41,10 @@ Report options read from project.report_options (all optional):
     include_marked_plans  bool, default True   section 3
     include_photo_log     bool, default True   section 6
     job_no, site_visit_no str                  header (no Project field yet)
+    project_no, report_no str                  MKA aliases for the two above
+    client, contractor, conditions, present    MKA cover/general conditions
+    visit_time            str                  MKA general conditions; inferred
+                                               from the first observation if blank
     stage_of_construction, structural_elements_observed
                           str                  tagged templates only; blank
                                                unless the engineer wrote them
@@ -69,6 +78,11 @@ _SHORT_DESC = 80          # characters of description in the photo log
 
 _TAG_RE = re.compile(rb"\{\{|\{%")
 _STEP_RE = re.compile(r"^\d+[\).]\s*")
+_DEFAULT_MKA_TEMPLATE = (
+    Path(__file__).resolve().parent.parent
+    / "MKA Report Template"
+    / "MKA Site Visit Observation Template.docx"
+)
 
 
 # ----------------------------------------------------------------------------
@@ -87,7 +101,9 @@ def build_report(project: Project, out_docx: Path) -> Path:
     entries = _entries(project)
     out_docx.parent.mkdir(parents=True, exist_ok=True)
 
-    if template is not None and _has_jinja_tags(template):
+    if template is None:
+        _build_from_mka_template(project, entries, _DEFAULT_MKA_TEMPLATE, out_docx)
+    elif _has_jinja_tags(template):
         _build_from_tagged_template(project, entries, template, out_docx)
     else:
         _build_with_python_docx(project, entries, template, out_docx)
@@ -285,6 +301,191 @@ def _draw_pins(sheet: PlanSheet, entries: list[_Entry], out: Path) -> Path:
         draw.text((x, y), e.label, fill="white", font=font, anchor="mm")
     im.save(out, "PNG", optimize=True)
     return out
+
+
+# ----------------------------------------------------------------------------
+# default MKA template
+# ----------------------------------------------------------------------------
+def _build_from_mka_template(project: Project, entries: list[_Entry],
+                             template: Path, out_docx: Path) -> None:
+    """Populate the supplied MKA form without changing its branding/layout."""
+    from docx import Document
+
+    if not template.is_file():
+        raise FileNotFoundError(f"Bundled MKA report template not found: {template}")
+
+    doc = Document(str(template))
+    opts = project.report_options or {}
+    report_no = opts.get("report_no") or opts.get("site_visit_no") or ""
+    project_no = opts.get("project_no") or opts.get("job_no") or ""
+    cover_values = [
+        project.name,
+        str(report_no),
+        project.site_address,
+        f"{project.visit_date:%m/%d/%Y}",
+        str(project_no),
+        project.engineer,
+        str(opts.get("client", "") or ""),
+        f"{project.visit_date:%m/%d/%Y}",
+        str(opts.get("contractor", "") or ""),
+        "",                         # legacy total-page placeholder
+    ]
+    _mka_fill_cover(doc, cover_values)
+    _mka_fill_conditions(doc, project, entries)
+    _mka_fill_observation_table(doc, entries)
+
+    # The source form contains its old working-file name as visible text.
+    for p in doc.paragraphs:
+        if p.text.strip() == "Document4":
+            p.text = ""
+
+    doc.core_properties.title = f"Construction Observation Report - {project.name}"
+    _zero_image_padding(doc)
+    doc.save(str(out_docx))
+
+
+def _mka_fill_cover(doc, values: list[str]) -> None:
+    """Replace the ten placeholder controls on the MKA cover sheet in order."""
+    from docx.oxml.ns import qn
+
+    placeholders = []
+    for sdt in doc.element.body.iter(qn("w:sdt")):
+        text = "".join(t.text or "" for t in sdt.iter(qn("w:t"))).strip()
+        if text.startswith("Click or tap") or text.startswith("Click here"):
+            placeholders.append(sdt)
+    if len(placeholders) != len(values):
+        raise ValueError(
+            f"MKA template has {len(placeholders)} cover placeholders; expected {len(values)}")
+
+    for sdt, value in zip(placeholders, values):
+        texts = list(sdt.iter(qn("w:t")))
+        if texts:
+            texts[0].text = str(value or "")
+            for node in texts[1:]:
+                node.text = ""
+        sdt_pr = sdt.find(qn("w:sdtPr"))
+        if sdt_pr is not None:
+            showing = sdt_pr.find(qn("w:showingPlcHdr"))
+            if showing is not None:
+                sdt_pr.remove(showing)
+
+
+def _mka_fill_conditions(doc, project: Project, entries: list[_Entry]) -> None:
+    opts = project.report_options or {}
+    first_time = next((e.obs.taken_at for e in entries if e.obs.taken_at), None)
+    inferred_time = ""
+    if first_time is not None:
+        inferred_time = first_time.strftime("%I:%M %p").lstrip("0").lower()
+
+    present = opts.get("present", project.engineer)
+    if isinstance(present, (list, tuple)):
+        present = ", ".join(str(person) for person in present if str(person).strip())
+    values = {
+        "Time:": str(opts.get("visit_time") or inferred_time),
+        "Conditions:": str(opts.get("conditions") or opts.get("weather") or ""),
+        "Present:": str(present or ""),
+    }
+    present_index = None
+    for i, p in enumerate(doc.paragraphs):
+        for label, value in values.items():
+            if p.text.strip().startswith(label):
+                p.text = f"{label} {value}".rstrip()
+                if label == "Present:":
+                    present_index = i
+                break
+
+    # Clear the second attendee placeholder line and use the following blank
+    # paragraph for the editable visit summary/general conditions narrative.
+    if present_index is not None and present_index + 1 < len(doc.paragraphs):
+        extra = doc.paragraphs[present_index + 1]
+        if "First Last" in extra.text:
+            extra.text = ""
+    if project.summary.strip() and present_index is not None:
+        for p in doc.paragraphs[present_index + 1:]:
+            if not p.text.strip() and p._p.find(".//{*}sectPr") is None:
+                p.text = "\n\n".join(_paragraphs(project.summary))
+                break
+
+
+def _mka_fill_observation_table(doc, entries: list[_Entry]) -> None:
+    from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Inches, Pt, RGBColor
+
+    if not doc.tables:
+        raise ValueError("MKA template is missing its observation table")
+    table = doc.tables[0]
+    if len(table.columns) != 3:
+        raise ValueError("MKA observation table must have three columns")
+
+    # Retain the branded column-heading row and replace the two sample rows.
+    for row in list(table.rows)[1:]:
+        table._tbl.remove(row._tr)
+    _repeat_header(table.rows[0])
+
+    figure_no = 1
+    for e in entries:
+        row = table.add_row()
+        _cant_split(row)
+        number, summary, photo_cell = row.cells
+        for cell in row.cells:
+            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
+            cell.margin_top = Inches(0.05)
+            cell.margin_bottom = Inches(0.05)
+
+        number.text = ""
+        p = number.paragraphs[0]
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.add_run(e.label).bold = True
+
+        summary.text = ""
+        p = summary.paragraphs[0]
+        p.paragraph_format.space_after = Pt(4)
+        p.add_run(e.obs.description.strip() or "(no description)")
+        if e.sheet_name:
+            p = summary.add_paragraph()
+            p.paragraph_format.space_after = Pt(2)
+            p.add_run("Location: ").bold = True
+            p.add_run(e.sheet_name)
+        sev = _sev(e.obs)
+        if sev != Severity.INFO or e.obs.tags:
+            p = summary.add_paragraph()
+            p.paragraph_format.space_after = Pt(2)
+            p.add_run("Severity: ").bold = True
+            run = p.add_run(sev.value)
+            run.font.color.rgb = RGBColor.from_string(SEVERITY_COLORS[sev].lstrip("#"))
+            if e.obs.tags:
+                p.add_run("    Tags: " + ", ".join(e.obs.tags))
+        action, steps = _action_parts(e.obs.action_item)
+        if action or steps:
+            p = summary.add_paragraph()
+            p.paragraph_format.space_after = Pt(2)
+            p.add_run("Action: ").bold = True
+            p.add_run(action)
+            for i, step in enumerate(steps, 1):
+                sp = summary.add_paragraph(f"{i}) {step}")
+                sp.paragraph_format.left_indent = Inches(0.15)
+                sp.paragraph_format.space_after = Pt(1)
+
+        photo_cell.text = ""
+        for photo_index, photo in enumerate(e.photos):
+            if photo_index:
+                photo_cell.add_paragraph()
+            stream, width, height = _image_stream(photo, _PHOTO_MAX_PX)
+            p = photo_cell.paragraphs[-1]
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p.paragraph_format.space_after = Pt(2)
+            p.add_run().add_picture(
+                stream, **_photo_size(width, height, max(1, len(e.photos)), 2.25))
+
+            caption = _explicit_caption(e.obs, photo)
+            cp = photo_cell.add_paragraph()
+            cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            cp.paragraph_format.space_after = Pt(4)
+            cr = cp.add_run(f"Figure {figure_no}." + (f" {caption}" if caption else ""))
+            cr.italic = True
+            cr.font.size = Pt(8)
+            figure_no += 1
 
 
 # ----------------------------------------------------------------------------

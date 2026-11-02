@@ -56,39 +56,52 @@ def _text(doc) -> str:
     return "\n".join(parts)
 
 
+def _all_text(doc) -> str:
+    return "\n".join(node.text or "" for node in doc.element.body.iter(qn("w:t")))
+
+
 def _picture_count(doc) -> int:
     return len(list(doc.element.body.iter(qn("wp:inline"))))
 
 
-def test_plain_report_has_all_sections(tmp_path):
+def test_default_report_uses_mka_template(tmp_path):
     out = tmp_path / "out" / "report.docx"
     result = word_report.build_report(_project(tmp_path), out)
 
     assert result == out and out.is_file()
     doc = Document(str(out))
-    text = _text(doc)
-    for expected in ("Site Visit Report", "99 Green St Remodel", "260XX.00", "Summary",
-                     "Framing about 80% complete.", "Plan Sheets", "Observations",
-                     "ITEM 3.1", "ITEM 3.2", "ITEM 5", "Location:\tS-201 Second Floor Framing Plan",
-                     "Looking north", "Action Items", "Photo Log", "1) Install stud on both sides"):
+    text = _all_text(doc)
+    for expected in ("Construction Observation Report", "99 Green St Remodel", "260XX.00",
+                     "Framing about 80% complete.", "Observations", "Activity",
+                     "Summary of Construction Observation", "3.1", "3.2", "5",
+                     "Location: ", "S-201 Second Floor Framing Plan", "Looking north",
+                     "Action: ", "1) Install stud on both sides"):
         assert expected in text, expected
     assert "Captured but left out" not in text
-    assert "ITEM 6" not in text
-    # 4 photos + 1 marked-up plan sheet
-    assert _picture_count(doc) == 5
+    assert "Document4" not in text
+    assert len(doc.tables) == 1 and len(doc.tables[0].rows) == 4
+    assert _picture_count(doc) == 4
 
 
 def test_description_is_not_repeated_as_caption(tmp_path):
     doc = Document(str(word_report.build_report(_project(tmp_path), tmp_path / "r.docx")))
-    assert _text(doc).count("Discontinued studs at window") == 2   # ITEM line + photo log
+    assert _all_text(doc).count("Discontinued studs at window") == 1
 
 
-def test_report_options_turn_sections_off(tmp_path):
-    project = _project(tmp_path, report_options={"include_marked_plans": False,
-                                                 "include_photo_log": False})
+def test_mka_report_options_fill_cover_and_conditions(tmp_path):
+    project = _project(tmp_path, report_options={"project_no": "A1234.00",
+                                                 "report_no": "007",
+                                                 "client": "Example Architects",
+                                                 "contractor": "Example Builders",
+                                                 "conditions": "Sunny, 68°F",
+                                                 "visit_time": "10:30 a.m.",
+                                                 "present": ["A. Engineer, MKA", "B. Builder, GC"]})
     doc = Document(str(word_report.build_report(project, tmp_path / "r.docx")))
-    text = _text(doc)
-    assert "Plan Sheets" not in text and "Photo Log" not in text
+    text = _all_text(doc)
+    for expected in ("A1234.00", "007", "Example Architects", "Example Builders",
+                     "Conditions: Sunny, 68°F", "Time: 10:30 a.m.",
+                     "Present: A. Engineer, MKA, B. Builder, GC"):
+        assert expected in text
     assert _picture_count(doc) == 4
 
 
@@ -96,8 +109,8 @@ def test_unnumbered_observations_get_their_own_items(tmp_path):
     project = _project(tmp_path)
     for o in project.observations:
         o.number = 0
-    text = _text(Document(str(word_report.build_report(project, tmp_path / "r.docx"))))
-    assert all(f"ITEM {n}\t" in text for n in (1, 2, 3))
+    doc = Document(str(word_report.build_report(project, tmp_path / "r.docx")))
+    assert [row.cells[0].text for row in doc.tables[0].rows[1:]] == ["1", "2", "3"]
 
 
 def test_firm_template_keeps_header_and_drops_old_body(tmp_path):
@@ -175,6 +188,9 @@ def test_plan_sheet_pins_only_the_included_entries(tmp_path, monkeypatch):
     monkeypatch.setattr(plan_markup, "sheet_image_with_pins", fake)
 
     project = _project(tmp_path)
+    template = Document()
+    template.save(str(tmp_path / "ordinary.docx"))
+    project.template_path = tmp_path / "ordinary.docx"
     project.observations[3].pin = PlanPin(project.plans[0].id, 0.1, 0.1)   # excluded, pinned
     doc = Document(str(word_report.build_report(project, tmp_path / "r.docx")))
 

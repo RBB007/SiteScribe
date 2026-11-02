@@ -1,6 +1,7 @@
 """End-to-end tests for the photo-entry model and the PR #27 review fixes."""
 import io, os, sys, json, zlib, struct, zipfile, tempfile, shutil
 import pytest
+from docx import Document
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "webapp"))
 
@@ -176,10 +177,12 @@ def test_export_uses_entry_headings_and_respects_include(client):
     client.patch("/api/item/001/photo/001_02", json={"description": "dropped entry", "include": False})
     r = client.get("/api/export/docx")
     assert r.status_code == 200
-    doc = zipfile.ZipFile(io.BytesIO(r.data)).read("word/document.xml").decode()
-    # word_report numbers by item: the one included entry of item 001 is ITEM 1
-    assert "ITEM 1" in doc and "kept entry" in doc and "Major" in doc
-    assert "dropped entry" not in doc
+    doc = Document(io.BytesIO(r.data))
+    text = "\n".join(c.text for row in doc.tables[0].rows for c in row.cells)
+    # word_report numbers by item: the one included entry of item 001 is row 1
+    assert doc.tables[0].rows[1].cells[0].text == "1"
+    assert "kept entry" in text and "Major" in text
+    assert "dropped entry" not in text
 
 
 def test_entry_without_an_image_exports(client):
