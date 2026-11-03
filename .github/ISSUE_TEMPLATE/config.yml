@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
   - name: How we work
-    url: https://github.com/RBB007/SiteScribe/blob/main/CONTRIBUTING.md
-    about: Pick a module, keep the signatures, open a PR that says "Closes #<issue>".
+    url: https://github.com/amourougassamy/SiteScribe/blob/main/CONTRIBUTING.md
+    about: Branch from main, run the tests, open a PR that says "Closes #<issue>".

@@ -1,5 +1,6 @@
 # Web app (webapp/). Run from the repo root with:  python run.py
-# The live server installs webapp/requirements.txt (see DEPLOY.md); keep the two in step.
+# Render installs this file (render.yaml). webapp/requirements.txt is the legacy local
+# app's list; keep the two in step.
 flask>=3.0
 gunicorn>=21.0       # webapp: production server on the live deploy
 requests>=2.31       # webapp: Whisper fallback; also voice.py

@@ -32,3 +32,20 @@ Production starts empty. Do not copy local demo files into the cloud stores.
 Before production deployment, run the full tests, migration upgrade/downgrade
 test, authorization isolation suite, archive checksum round-trip, backup
 reconciliation, and retention dry run.
+
+## Environment variables beyond the contract
+
+`docs/cloud-contracts.md` lists the core environment contract. The code also reads:
+
+| Variable | Used by | Default / notes |
+| --- | --- | --- |
+| `ANTHROPIC_API_KEY` | report drafting | Admins can also store an encrypted key on the Admin settings page |
+| `ANTHROPIC_MODEL` | report drafting | `claude-sonnet-5-5` (also set in `render.yaml`) |
+| `RESEND_API_KEY`, `REPORT_EMAIL_FROM` | report email delivery | Email delivery is unavailable without them |
+| `AUTH_COOKIE_SECURE` | auth cookies | `true`; set `false` only for local HTTP testing |
+| `AZURE_TENANT_ID` | auth config | Empty; reserved for future Microsoft Entra SSO |
+| `LOG_LEVEL` | JSON logging | `INFO` |
+
+## Installable app (PWA)
+
+The service worker, offline queue, and their limitations are covered in [pwa.md](pwa.md).

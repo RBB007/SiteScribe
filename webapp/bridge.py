@@ -8,7 +8,7 @@ file converts one to the other so a route can hand a whole visit to a module
 (today: `word_report.build_report`) without either side knowing about the
 other's shape. Routes never see the dataclasses; modules never see the JSON.
 
-Mapping (see INTEGRATION_PLAN.md):
+Mapping (see docs/archive/hackathon/INTEGRATION_PLAN.md):
 
     photo entry 003_02            Observation, number 3 (the item), id "003_02"
     entry filename                photo_path and photos[0] (left out if missing)

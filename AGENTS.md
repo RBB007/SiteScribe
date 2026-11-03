@@ -1,6 +1,6 @@
 # SiteScribe cloud migration agents
 
-This file governs the cloud migration and overrides the older one-module ownership guidance in `AI_INSTRUCTIONS.md` where they conflict.
+This file governs the cloud migration and overrides the older one-module ownership guidance in `docs/archive/hackathon/AI_INSTRUCTIONS.md` where they conflict.
 
 ## Shell and safety
 

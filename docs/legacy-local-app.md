@@ -1,35 +1,25 @@
-# MKA Site-to-Report — item capture web app (Flask)
+# Legacy local app (`webapp/server.py`)
 
-A phone-first capture UI built to the **App Workflow** slide and the notebook
-sketch: an Item navigator over a photo, a Photo navigator under it.
+> **Not the production app.** Production is the cloud app in `webapp/cloud_app.py`
+> (see the [README](../README.md)). This single-user app keeps everything on local
+> disk behind a shared PIN and is useful for trying the capture UI without cloud
+> services. The hackathon tunnel deployment it used to run on is retired.
 
-> **Note for the team:** this Flask app is the main MKA Site-to-Report app. The
-> Streamlit app that used to live on `main` is retired. The `sitescribe/`
-> modules plug in behind these routes; see [INTEGRATION_PLAN.md](../INTEGRATION_PLAN.md).
-> From the repo root, `python run.py` starts this same server.
-
-## Live
-
-**https://planning-matrix-bacteria-occupation.trycloudflare.com** (PIN: ask the team)
-
-Merges to the tracked branch deploy themselves within 2 minutes — see
-[DEPLOY.md](../DEPLOY.md). You do not need server access to change it.
+A phone-first capture UI: an Item navigator over a photo, a Photo navigator under it.
 
 ## Run locally
 
+From the repo root:
+
 ```bash
 pip install -r requirements.txt
-python server.py            # http://localhost:5000   PIN 2424
+python run.py               # http://localhost:5000   PIN 2424 (set SITESCRIBE_PIN)
 ```
 
-`localhost` is a secure context, so camera and mic work with no HTTPS.
-For a phone you need a public HTTPS URL:
-
-```bash
-cloudflared tunnel --url http://localhost:5000
-```
-
-Plain HTTP on a LAN IP **silently** blocks the microphone.
+`localhost` is a secure context, so camera and mic work with no HTTPS. A phone
+needs a public HTTPS URL, for example `cloudflared tunnel --url http://localhost:5000`.
+Plain HTTP on a LAN IP **silently** blocks the microphone. A tunnel URL is public:
+change the PIN and leave `FLASK_DEBUG` unset while it is open.
 
 ## Reports (projects)
 
