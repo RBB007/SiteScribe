@@ -1,0 +1,45 @@
+# SiteScribe Supabase deployment configuration.
+project_id = "sitescribe"
+
+[db]
+major_version = 17
+
+[db.migrations]
+enabled = true
+
+[db.seed]
+enabled = false
+
+[auth]
+# Trial users are created by an administrator; the public cannot self-register.
+enable_signup = false
+
+[storage]
+enabled = true
+file_size_limit = "64MiB"
+
+[storage.buckets.project-files]
+public = false
+file_size_limit = "64MiB"
+allowed_mime_types = [
+  "application/json",
+  "application/pdf",
+  "application/zip",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "audio/aac",
+  "audio/mp4",
+  "audio/mpeg",
+  "audio/ogg",
+  "audio/wav",
+  "audio/webm",
+  "image/heic",
+  "image/heif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "text/plain",
+]
+
+# The Supabase GitHub Integration matches this project ref when deploying main.
+[remotes.main]
+project_id = "rheldqbjlsolhaizodla"

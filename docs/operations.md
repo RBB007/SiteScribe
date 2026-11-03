@@ -7,8 +7,8 @@ versioned file backup target.
 ## Initial setup
 
 1. Create a Supabase project and private project-files bucket.
-2. Configure Azure as the Supabase OAuth provider with one tenant and the
-   callback URL shown by Supabase.
+2. Create the trial administrator in Supabase Authentication with an email
+   and password matching `BOOTSTRAP_ADMIN_EMAIL`. Public signup stays disabled.
 3. Create a versioned S3 bucket with default encryption and an IAM principal
    limited to that bucket.
 4. Connect the repository to Render using render.yaml, then set every

@@ -88,6 +88,27 @@ def test_exchange_refresh_and_user_requests():
     assert http.calls[2][2]["headers"]["Authorization"] == "Bearer access"
 
 
+def test_password_sign_in_normalizes_email_and_uses_password_grant():
+    payload = {
+        "access_token": "access",
+        "refresh_token": "refresh",
+        "expires_in": 3600,
+        "user": {"id": "user-id", "email": "person@example.com"},
+    }
+    http = FakeHttp([FakeResponse(payload=payload)])
+    session = SupabaseAuthClient(config(), http).password_sign_in(
+        " Person@Example.com ", "trial-password"
+    )
+    assert session.user.email == "person@example.com"
+    method, url, options = http.calls[0]
+    assert method == "POST"
+    assert url.endswith("/auth/v1/token?grant_type=password")
+    assert options["json"] == {
+        "email": "person@example.com",
+        "password": "trial-password",
+    }
+
+
 def test_auth_failure_does_not_expose_provider_body():
     http = FakeHttp([FakeResponse(status_code=401, payload={"secret": "do not leak"})])
     client = SupabaseAuthClient(config(), http)
