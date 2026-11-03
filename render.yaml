@@ -28,6 +28,14 @@ services:
         generateValue: true
       - key: AUTH_TOKEN_ENCRYPTION_KEYS
         sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-5-5
+      - key: RESEND_API_KEY
+        sync: false
+      - key: REPORT_EMAIL_FROM
+        sync: false
 
   - type: cron
     name: sitescribe-file-backup

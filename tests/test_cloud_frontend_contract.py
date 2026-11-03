@@ -33,14 +33,24 @@ def test_project_form_is_single_submit_and_opens_initial_visit():
     assert "let creatingProject=false" in markup
     assert "if(creatingProject)return" in markup
     assert 'name="visit_date"' in markup
-    assert 'location.assign("/visits/"+project.initial_visit.id)' in markup
+    assert 'location.assign("/visits/"+project.initial_visit.id+"/overview")' in markup
 
 
 def test_cloud_visit_exposes_mobile_capture_controls():
     markup = (ROOT / "webapp/templates/cloud_visit.html").read_text("utf-8")
+    script = (ROOT / "webapp/static/cloud_capture_media.js").read_text("utf-8")
 
     assert "MKA Site Visit Buddy" in markup
-    assert "Record voice" in markup
-    assert "MediaRecorder" in markup
-    assert 'accept=\'image/*\'' in markup
-    assert 'form.append("kind",kind)' in markup
+    assert 'aria-label="Record audio"' in markup
+    assert "MediaRecorder" in script
+    assert 'accept="image/*"' in markup
+    assert 'form.append("kind",kind)' in script
+
+
+def test_cloud_visit_overview_links_to_explicit_items():
+    markup = (ROOT / "webapp/templates/cloud_visit_overview.html").read_text("utf-8")
+    script = (ROOT / "webapp/static/cloud_overview.js").read_text("utf-8")
+
+    assert "[Project name]" in markup
+    assert "[Date]" in markup
+    assert '"?item="+item.id' in script

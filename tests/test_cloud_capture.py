@@ -81,3 +81,42 @@ def test_explicit_visit_capture_and_private_upload(tmp_path):
     assert uploaded.status_code == 201
     assert uploaded.json["download_url"].startswith("/api/files/")
     assert list(store.objects.values()) == [b"jpeg-data"]
+
+
+def test_visit_overview_and_atomic_new_item(tmp_path):
+    client, _store, visit_id = setup_app(tmp_path)
+    created = client.post(
+        f"/api/visits/{visit_id}/items", json={"create_observation": True}
+    )
+    assert created.status_code == 201
+    assert len(created.json["observations"]) == 1
+    observation = created.json["observations"][0]
+    updated = client.patch(
+        f"/api/visits/{visit_id}/observations/{observation['id']}",
+        json={"description": "[Observation summary]", "severity": "Critical"},
+    )
+    assert updated.status_code == 200
+
+    overview = client.get(f"/api/visits/{visit_id}/overview")
+    assert overview.status_code == 200
+    assert overview.json["project"]["name"] == "Tower"
+    assert overview.json["stats"] == {"items": 1, "included": 1, "critical": 1}
+    assert overview.json["items"][0]["observations"][0]["files"] == []
+
+
+def test_deleting_item_removes_its_private_files(tmp_path):
+    client, store, visit_id = setup_app(tmp_path)
+    item = client.post(
+        f"/api/visits/{visit_id}/items", json={"create_observation": True}
+    ).json
+    observation_id = item["observations"][0]["id"]
+    client.post(
+        f"/api/visits/{visit_id}/observations/{observation_id}/files",
+        data={"kind": "photo", "file": (io.BytesIO(b"photo"), "field.jpg", "image/jpeg")},
+    )
+    assert store.objects
+
+    deleted = client.delete(f"/api/visits/{visit_id}/items/{item['id']}")
+    assert deleted.status_code == 204
+    assert store.objects == {}
+    assert client.get(f"/api/visits/{visit_id}/items").json == []

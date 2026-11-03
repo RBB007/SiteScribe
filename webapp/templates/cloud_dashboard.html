@@ -27,6 +27,7 @@
 <main>
   <h2>Projects</h2>
   <div class="muted">{{ user.email }} &middot; {{ user.role }}</div>
+  {% if user.role == "admin" %}<p><a href="/admin">Admin settings</a></p>{% endif %}
   <form class="bar" id="new-project">
     <input name="name" maxlength="300" required placeholder="Project name">
     <input name="project_number" maxlength="100" placeholder="Project number">
@@ -68,7 +69,7 @@ async function load(){
         });load();
       };
       visits.forEach(v=>{const row=document.createElement("div");row.className="visit";
-        row.innerHTML="<a href=/visits/"+v.id+">"+safe(v.visit_date)+
+        row.innerHTML="<a href=/visits/"+v.id+"/overview>"+safe(v.visit_date)+
           (v.report_number?" - "+safe(v.report_number):"")+"</a>";box.append(row)});
     }
   }catch(error){message.textContent=error.message}
@@ -83,7 +84,7 @@ projectForm.onsubmit=async event=>{
   const form=new FormData(event.target);
   try{
     const project=await api("/api/projects",{method:"POST",body:JSON.stringify(Object.fromEntries(form))});
-    location.assign("/visits/"+project.initial_visit.id);
+    location.assign("/visits/"+project.initial_visit.id+"/overview");
   }catch(error){
     message.textContent=error.message;creatingProject=false;createButton.disabled=false;
     createButton.textContent="Create & start visit";

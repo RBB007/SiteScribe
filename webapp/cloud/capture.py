@@ -23,15 +23,35 @@ def create_capture_blueprint(database, auth, store) -> Blueprint:
     def list_items(visit_id):
         with database.transaction() as db:
             visit = _visit(db, visit_id)
-            items = list(db.scalars(
-                select(Item).options(selectinload(Item.observations))
-                .where(Item.visit_id == visit.id).order_by(Item.position, Item.id)
-            ))
+            items = list(db.scalars(_items_query(visit.id)))
             return jsonify([_item_json(item) for item in items])
+
+    @api.get("/api/visits/<visit_id>/overview")
+    @guarded
+    def visit_overview(visit_id):
+        with database.transaction() as db:
+            visit = _visit(db, visit_id)
+            project = db.get(Project, visit.project_id)
+            items = list(db.scalars(_items_query(visit.id)))
+            observations = [value for item in items for value in item.observations]
+            return jsonify({
+                "project": {"id": str(project.id), "name": project.name},
+                "visit": {"id": str(visit.id), "visit_date": visit.visit_date.isoformat()},
+                "stats": {
+                    "items": len(items),
+                    "included": sum(value.include_in_report for value in observations),
+                    "critical": sum(
+                        str(value.severity or "").lower() == "critical"
+                        for value in observations
+                    ),
+                },
+                "items": [_item_json(item) for item in items],
+            })
 
     @api.post("/api/visits/<visit_id>/items")
     @guarded
     def create_item(visit_id):
+        body = request.get_json(silent=True) or {}
         with database.transaction() as db:
             visit = _visit(db, visit_id)
             last = db.execute(select(
@@ -41,7 +61,34 @@ def create_capture_blueprint(database, auth, store) -> Blueprint:
             item = Item(visit_id=visit.id, number=last[0] + 1, position=last[1] + 1)
             db.add(item)
             db.flush()
+            if body.get("create_observation"):
+                db.add(Observation(item_id=item.id, sequence=1, description=""))
+                db.flush()
             return jsonify(_item_json(item)), 201
+
+    @api.delete("/api/visits/<visit_id>/items/<item_id>")
+    @guarded
+    def delete_item(visit_id, item_id):
+        storage_keys = []
+        with database.transaction() as db:
+            visit = _visit(db, visit_id)
+            item = db.scalar(select(Item).where(
+                Item.id == _uuid(item_id), Item.visit_id == visit.id
+            ))
+            if item is None:
+                return jsonify(error="item not found"), 404
+            records = list(db.scalars(
+                select(File).join(ObservationFile).join(Observation).where(
+                    Observation.item_id == item.id
+                )
+            ))
+            storage_keys = [record.storage_key for record in records]
+            for record in records:
+                db.delete(record)
+            db.delete(item)
+        for key in storage_keys:
+            store.delete(key)
+        return "", 204
 
     @api.post("/api/visits/<visit_id>/items/<item_id>/observations")
     @guarded
@@ -176,10 +223,26 @@ def _uuid(value):
         return None
 
 
+def _items_query(visit_id):
+    return (
+        select(Item)
+        .options(
+            selectinload(Item.observations)
+            .selectinload(Observation.file_links)
+            .selectinload(ObservationFile.file)
+        )
+        .where(Item.visit_id == visit_id)
+        .order_by(Item.position, Item.id)
+    )
+
+
 def _item_json(item):
     return {
         "id": str(item.id), "number": item.number, "position": item.position,
-        "observations": [_observation_json(value) for value in item.observations],
+        "observations": [
+            _observation_json(value)
+            for value in sorted(item.observations, key=lambda row: (row.sequence, row.id))
+        ],
     }
 
 
@@ -190,4 +253,10 @@ def _observation_json(value):
         "caption": value.caption, "severity": value.severity, "tags": value.tags,
         "action": value.action, "include_in_report": value.include_in_report,
         "plan_page": value.plan_page, "plan_x": value.plan_x, "plan_y": value.plan_y,
+        "files": [{
+            "id": str(link.file.id), "kind": link.file.kind,
+            "media_role": link.media_role, "filename": link.file.original_filename,
+            "mime_type": link.file.mime_type,
+            "download_url": f"/api/files/{link.file.id}",
+        } for link in sorted(value.file_links, key=lambda row: row.position)],
     }

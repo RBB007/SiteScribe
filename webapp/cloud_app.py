@@ -12,6 +12,7 @@ from flask import Flask, g, jsonify, render_template
 from sqlalchemy import text
 
 from webapp.cloud.api import create_api_blueprint
+from webapp.cloud.admin import create_admin_blueprint
 from webapp.cloud.capture import create_capture_blueprint
 from webapp.cloud.auth import (
     AuthConfig, AuthenticationService, SupabaseAuthClient, TokenCipher,
@@ -20,6 +21,7 @@ from webapp.cloud.auth import (
 from webapp.cloud.db import create_database
 from webapp.cloud.files import create_files_blueprint
 from webapp.cloud.exports import create_exports_blueprint
+from webapp.cloud.reports import create_reports_blueprint
 from webapp.cloud.ops import configure_json_logging, create_health_blueprint
 from webapp.cloud.storage import SupabaseBlobStore
 
@@ -53,9 +55,11 @@ def create_app() -> Flask:
     app.register_blueprint(create_health_blueprint(ready_check))
     app.register_blueprint(create_auth_blueprint(auth_client, auth))
     app.register_blueprint(create_api_blueprint(database, auth))
+    app.register_blueprint(create_admin_blueprint(auth, blob_store))
     app.register_blueprint(create_capture_blueprint(database, auth, blob_store))
     app.register_blueprint(create_files_blueprint(database, auth, blob_store))
     app.register_blueprint(create_exports_blueprint(database, auth, blob_store))
+    app.register_blueprint(create_reports_blueprint(database, auth, blob_store))
 
     @app.get("/")
     @require_cloud_user(auth, redirect_to_login=True)
@@ -66,6 +70,11 @@ def create_app() -> Flask:
     @require_cloud_user(auth, redirect_to_login=True)
     def capture_visit(visit_id):
         return render_template("cloud_visit.html", visit_id=visit_id, user=g.cloud_user)
+
+    @app.get("/visits/<visit_id>/overview")
+    @require_cloud_user(auth, redirect_to_login=True)
+    def visit_overview(visit_id):
+        return render_template("cloud_visit_overview.html", visit_id=visit_id, user=g.cloud_user)
 
     @app.errorhandler(413)
     def too_large(_exc):
