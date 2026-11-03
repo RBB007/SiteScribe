@@ -21,28 +21,30 @@ NAMES = {"agents": "AGENTS.md", "template": "report_template.docx", "secret": "c
 def create_admin_blueprint(auth, store):
     blueprint = Blueprint("cloud_admin", __name__)
 
-    def admin_only(view):
-        @wraps(view)
-        @require_cloud_user(auth, redirect_to_login=True)
-        def wrapped(*args, **kwargs):
-            if g.cloud_user.role != "admin":
-                return jsonify(error="administrator access required"), 403
-            return view(*args, **kwargs)
-        return wrapped
+    def admin_only(*, redirect_to_login):
+        def decorate(view):
+            @wraps(view)
+            @require_cloud_user(auth, redirect_to_login=redirect_to_login)
+            def wrapped(*args, **kwargs):
+                if g.cloud_user.role != "admin":
+                    return jsonify(error="administrator access required"), 403
+                return view(*args, **kwargs)
+            return wrapped
+        return decorate
 
     @blueprint.get("/admin")
-    @admin_only
+    @admin_only(redirect_to_login=True)
     def page():
         return render_template("cloud_admin.html", user=g.cloud_user)
 
     @blueprint.get("/api/admin/settings")
-    @admin_only
+    @admin_only(redirect_to_login=False)
     def status():
         return jsonify({name: _exists(store, _key(g.cloud_user.workspace_id, filename))
                         for name, filename in NAMES.items()})
 
     @blueprint.post("/api/admin/settings")
-    @admin_only
+    @admin_only(redirect_to_login=False)
     def update():
         changed = []
         api_key = request.form.get("api_key", "").strip()

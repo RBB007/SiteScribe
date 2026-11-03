@@ -34,6 +34,18 @@ def test_non_admin_cannot_view_or_update_settings(tmp_path):
     assert client.post("/api/admin/settings", data={"api_key": "secret"}).status_code == 403
 
 
+def test_admin_api_returns_json_when_session_is_missing(tmp_path):
+    app = Flask(__name__, template_folder="../webapp/templates")
+    app.secret_key = "test"
+    app.register_blueprint(create_admin_blueprint(Auth("admin"), LocalBlobStore(tmp_path / "objects")))
+
+    response = app.test_client().get("/api/admin/settings")
+
+    assert response.status_code == 401
+    assert response.is_json
+    assert response.json["error"] == "authentication required"
+
+
 def test_admin_uploads_encrypted_key_instructions_and_template(tmp_path, monkeypatch):
     monkeypatch.setenv("FLASK_SECRET_KEY", "unit-test-encryption-secret")
     client, store = client_for(tmp_path, "admin")
