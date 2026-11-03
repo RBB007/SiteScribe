@@ -42,7 +42,7 @@ def create_app() -> Flask:
         SESSION_COOKIE_SECURE=config.cookie_secure,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
-        MAX_CONTENT_LENGTH=64 * 1024 * 1024,
+        MAX_CONTENT_LENGTH=50 * 1024 * 1024,
     )
 
     def ready_check():
@@ -58,18 +58,18 @@ def create_app() -> Flask:
     app.register_blueprint(create_exports_blueprint(database, auth, blob_store))
 
     @app.get("/")
-    @require_cloud_user(auth)
+    @require_cloud_user(auth, redirect_to_login=True)
     def dashboard():
         return render_template("cloud_dashboard.html", user=g.cloud_user)
 
     @app.get("/visits/<visit_id>")
-    @require_cloud_user(auth)
+    @require_cloud_user(auth, redirect_to_login=True)
     def capture_visit(visit_id):
         return render_template("cloud_visit.html", visit_id=visit_id, user=g.cloud_user)
 
     @app.errorhandler(413)
     def too_large(_exc):
-        return jsonify(error="upload exceeds the 64 MB request limit"), 413
+        return jsonify(error="upload exceeds the 50 MiB request limit"), 413
 
     return app
 

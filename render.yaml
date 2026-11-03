@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: sitescribe
+    name: mka-site-visit-buddy
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt

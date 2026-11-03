@@ -15,7 +15,7 @@ SESSION_KEY = "cloud_sid"
 
 LOGIN_HTML = """<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sign in - SiteScribe</title><style>
+<title>Sign in - MKA Site Visit Buddy</title><style>
 :root{font:16px/1.5 system-ui;color:#182132;background:#f3f6fa}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px}
 main{width:min(100%,380px);background:white;border:1px solid #dce3ec;border-radius:18px;padding:26px}
@@ -23,7 +23,7 @@ h1{margin:0 0 6px}.muted{color:#66758a;margin:0 0 22px}
 label{display:block;margin:13px 0 5px;font-weight:650}input,button{width:100%;font:inherit;padding:12px;
 border:1px solid #b9c5d4;border-radius:9px}button{margin-top:18px;background:#1769e0;color:white;border:0;font-weight:700}
 .error{color:#a62d25;margin-top:14px}</style></head><body><main>
-<h1>SiteScribe</h1><p class="muted">Trial account sign in</p>
+<h1>MKA Site Visit Buddy</h1><p class="muted">Trial account sign in</p>
 <form method="post"><label for="email">Email</label>
 <input id="email" name="email" type="email" autocomplete="username" required autofocus>
 <label for="password">Password</label>
@@ -104,19 +104,21 @@ def create_auth_blueprint(
         return (
             "<!doctype html><title>Access pending</title>"
             "<h1>Access pending</h1>"
-            "<p>An administrator must activate your SiteScribe membership.</p>",
+            "<p>An administrator must activate your MKA Site Visit Buddy membership.</p>",
             403,
         )
 
     return blueprint
 
 
-def require_cloud_user(service: AuthenticationService):
+def require_cloud_user(service: AuthenticationService, *, redirect_to_login: bool = False):
     def decorate(fn):
         @functools.wraps(fn)
         def guarded(*args, **kwargs):
             user = service.resolve(session.get(SESSION_KEY, ""))
             if user is None:
+                if redirect_to_login:
+                    return redirect("/auth/login")
                 return jsonify(error="authentication required"), 401
             if user.status != "active":
                 return jsonify(error="active membership required"), 403

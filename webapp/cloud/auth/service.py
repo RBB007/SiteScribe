@@ -64,7 +64,7 @@ class AuthenticationService:
             if workspace is None:
                 if not is_bootstrap:
                     raise SignInRejected("An administrator must initialize this workspace first.")
-                workspace = Workspace(name="SiteScribe")
+                workspace = Workspace(name="MKA Site Visit Buddy")
                 db.add(workspace)
                 db.flush()
 

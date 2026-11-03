@@ -1,6 +1,6 @@
 {
-  "name": "MKA Site-to-Report",
-  "short_name": "MKA Report",
+  "name": "MKA Site Visit Buddy",
+  "short_name": "MKA Visit",
   "description": "Capture structural field observations and turn them into reports.",
   "start_url": "/",
   "scope": "/",

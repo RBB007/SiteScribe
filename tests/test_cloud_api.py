@@ -83,6 +83,35 @@ def test_api_requires_server_side_session(tmp_path):
     assert response.status_code == 401
 
 
+def test_create_project_can_atomically_start_first_visit(tmp_path):
+    client = make_app(tmp_path).test_client()
+    signed_in(client)
+
+    response = client.post(
+        "/api/projects",
+        json={"name": "One project", "visit_date": "2026-11-03"},
+    )
+
+    assert response.status_code == 201
+    assert response.json["name"] == "One project"
+    assert response.json["initial_visit"]["visit_date"] == "2026-11-03"
+    project_id = response.json["id"]
+    assert len(client.get(f"/api/projects/{project_id}/visits").json) == 1
+
+
+def test_create_project_rolls_back_when_initial_visit_date_is_invalid(tmp_path):
+    client = make_app(tmp_path).test_client()
+    signed_in(client)
+
+    response = client.post(
+        "/api/projects",
+        json={"name": "Must roll back", "visit_date": "not-a-date"},
+    )
+
+    assert response.status_code == 400
+    assert client.get("/api/projects").json == []
+
+
 def test_invalid_cross_resource_id_is_hidden(tmp_path):
     client = make_app(tmp_path).test_client()
     signed_in(client)

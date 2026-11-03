@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>MKA Site-to-Report Projects</title>
+  <title>MKA Site Visit Buddy</title>
   <style>
     :root{font:16px/1.5 system-ui;color:#182132;background:#f3f6fa}
     *{box-sizing:border-box}body{margin:0}header{background:#102a43;color:white;padding:18px max(20px,5vw);
@@ -12,6 +12,7 @@
     border-radius:14px;padding:18px}.bar{display:flex;gap:12px;margin:18px 0}.bar input{flex:1}
     input,button{font:inherit;padding:11px 13px;border:1px solid #b9c5d4;border-radius:9px}
     button{background:#1769e0;color:white;border-color:#1769e0;font-weight:650;cursor:pointer}
+    button:disabled{cursor:wait;opacity:.62}
     .projects{display:grid;gap:14px}.card{display:grid;grid-template-columns:1fr auto;gap:8px}
     .card h3{margin:0}.visits{grid-column:1/-1;margin-top:8px}.visit{padding:9px 0;border-top:1px solid #edf0f4}
     .danger{background:white;color:#a62d25;border-color:#d9a9a5}.error{color:#a62d25}
@@ -20,7 +21,7 @@
 </head>
 <body>
 <header>
-  <h1>MKA Site-to-Report</h1>
+  <h1>MKA Site Visit Buddy</h1>
   <form method="post" action="/auth/logout"><button class="danger">Sign out</button></form>
 </header>
 <main>
@@ -29,7 +30,8 @@
   <form class="bar" id="new-project">
     <input name="name" maxlength="300" required placeholder="Project name">
     <input name="project_number" maxlength="100" placeholder="Project number">
-    <button>Create project</button>
+    <input name="visit_date" type="date" required aria-label="First visit date">
+    <button id="create-project">Create &amp; start visit</button>
   </form>
   <p id="message" class="error" role="alert"></p>
   <section id="projects" class="projects" aria-live="polite"></section>
@@ -71,11 +73,21 @@ async function load(){
     }
   }catch(error){message.textContent=error.message}
 }
-document.querySelector("#new-project").onsubmit=async event=>{
+const projectForm=document.querySelector("#new-project"), createButton=document.querySelector("#create-project");
+projectForm.elements.visit_date.value=new Date().toISOString().slice(0,10);
+let creatingProject=false;
+projectForm.onsubmit=async event=>{
   event.preventDefault();message.textContent="";
+  if(creatingProject)return;
+  creatingProject=true;createButton.disabled=true;createButton.textContent="Creating...";
   const form=new FormData(event.target);
-  try{await api("/api/projects",{method:"POST",body:JSON.stringify(Object.fromEntries(form))});
-    event.target.reset();load()}catch(error){message.textContent=error.message}
+  try{
+    const project=await api("/api/projects",{method:"POST",body:JSON.stringify(Object.fromEntries(form))});
+    location.assign("/visits/"+project.initial_visit.id);
+  }catch(error){
+    message.textContent=error.message;creatingProject=false;createButton.disabled=false;
+    createButton.textContent="Create & start visit";
+  }
 };
 load();
 </script>

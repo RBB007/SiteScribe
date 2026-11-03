@@ -40,12 +40,20 @@ def create_api_blueprint(database, auth) -> Blueprint:
     def create_project():
         body = request.get_json(silent=True) or {}
         with database.transaction() as db:
-            projects, _ = repos(db)
+            projects, visits = repos(db)
             value = projects.create(
                 body.get("name", ""), project_number=body.get("project_number"),
                 address=body.get("address"), client=body.get("client"),
             )
-            return jsonify(_project_json(value)), 201
+            result = _project_json(value)
+            if body.get("visit_date"):
+                try:
+                    initial_date = date.fromisoformat(str(body["visit_date"]))
+                except ValueError as exc:
+                    raise ValueError("visit_date must be an ISO date") from exc
+                initial_visit = visits.create(value.id, initial_date)
+                result["initial_visit"] = _visit_json(initial_visit)
+            return jsonify(result), 201
 
     @api.get("/api/projects/<project_id>")
     @guarded

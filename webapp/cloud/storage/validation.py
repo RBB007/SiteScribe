@@ -34,7 +34,7 @@ DEFAULT_ALLOWED_CONTENT_TYPES = frozenset(
 
 @dataclass(frozen=True, slots=True)
 class UploadPolicy:
-    max_bytes: int = 100 * 1024 * 1024
+    max_bytes: int = 50 * 1024 * 1024
     allowed_content_types: frozenset[str] = DEFAULT_ALLOWED_CONTENT_TYPES
     allowed_extensions: frozenset[str] | None = None
     allow_empty: bool = False
@@ -73,4 +73,3 @@ def validate_upload(
     }:
         raise BlobValidationError(f"file extension is not allowed: {suffix or 'missing'}")
     return ValidatedUpload(safe_name, normalized_type, size)
-

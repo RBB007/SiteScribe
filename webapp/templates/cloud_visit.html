@@ -3,25 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>SiteScribe Visit</title>
+  <title>MKA Site Visit Buddy</title>
   <style>
     :root{font:16px/1.5 system-ui;color:#182132;background:#f3f6fa}*{box-sizing:border-box}
     body{margin:0}header{background:#102a43;color:#fff;padding:16px max(18px,4vw);display:flex;gap:18px;align-items:center}
     header a{color:white}main{max-width:900px;margin:auto;padding:24px 16px}.actions{display:flex;gap:10px;flex-wrap:wrap}
     button,input,textarea,select{font:inherit;padding:10px;border:1px solid #b9c5d4;border-radius:9px}
-    button{background:#1769e0;color:white;border:0;font-weight:650}.item{background:white;border:1px solid #dce3ec;
-    border-radius:14px;padding:16px;margin:14px 0}.observation{border-top:1px solid #e5e9ef;padding:14px 0}
-    textarea{width:100%;min-height:90px}.muted{color:#66758a}.error{color:#a62d25}
+    button{background:#1769e0;color:white;border:0;font-weight:650;cursor:pointer}
+    button:disabled{cursor:wait;opacity:.58}.item{background:white;border:1px solid #dce3ec;
+    border-radius:14px;padding:16px;margin:14px 0}.item-head,.observation-head,.media-actions{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    .observation{border-top:1px solid #e5e9ef;padding:18px 0}.observation:first-child{margin-top:12px}
+    textarea{width:100%;min-height:110px;margin:8px 0}.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .fields label{display:grid;gap:4px}.secondary{background:#fff;color:#1769e0;border:1px solid #8bb4eb}
+    .recording{background:#a62d25}.status{min-height:1.5em}.muted{color:#66758a}.error{color:#a62d25}
+    .empty{background:#fff;border:1px dashed #b9c5d4;border-radius:14px;padding:30px;text-align:center}
+    @media(max-width:600px){.fields{grid-template-columns:1fr}.media-actions button{flex:1}}
   </style>
 </head>
 <body>
-<header><a href="/">&larr; Projects</a><strong>Field visit</strong></header>
+<header><a href="/">&larr; Projects</a><strong>MKA Site Visit Buddy</strong></header>
 <main>
   <div class="actions">
-    <button id="add-item">Add item</button>
+    <button id="add-item">Add inspection item</button>
     <button id="archive">Download complete raw ZIP</button>
   </div>
-  <p id="message" class="error" role="alert"></p>
+  <p id="message" class="status" role="status"></p>
   <section id="items"></section>
 </main>
 <script>
@@ -33,36 +40,105 @@ async function api(url,options={}){
   const body=await response.json();if(!response.ok)throw new Error(body.error||"Request failed");return body;
 }
 function safe(value){const node=document.createElement("span");node.textContent=value||"";return node.innerHTML}
-async function load(){
-  try{const data=await api("/api/visits/"+visitId+"/items");items.innerHTML="";
-    data.forEach(item=>{const card=document.createElement("article");card.className="item";
-      card.innerHTML="<h2>Item "+item.number+"</h2><button data-add>Add observation</button><div data-list></div>";
-      card.querySelector("[data-add]").onclick=async()=>{
-        const description=prompt("Observation description");if(description===null)return;
-        await api("/api/visits/"+visitId+"/items/"+item.id+"/observations",{
-          method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({description})
-        });load()};
-      item.observations.forEach(obs=>{const row=document.createElement("div");row.className="observation";
-        row.innerHTML="<strong>Observation "+obs.sequence+"</strong><p>"+safe(obs.description)+
-          "</p><label><input type=checkbox "+(obs.include_in_report?"checked":"")+"> Include in report</label>"+
-          "<div><input type=file accept='image/*,audio/*,.pdf' data-file></div>";
-        row.querySelector("input[type=checkbox]").onchange=async event=>{
-          await api("/api/visits/"+visitId+"/observations/"+obs.id,{
-            method:"PATCH",headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({include_in_report:event.target.checked})})};
-        row.querySelector("[data-file]").onchange=async event=>{
-          const form=new FormData();form.append("file",event.target.files[0]);form.append("kind","photo");
-          await api("/api/visits/"+visitId+"/observations/"+obs.id+"/files",{method:"POST",body:form});
-          message.textContent="Upload saved."};
-        card.querySelector("[data-list]").append(row)});items.append(card)});
-  }catch(error){message.textContent=error.message}
+async function patchObservation(id,body){
+  return api("/api/visits/"+visitId+"/observations/"+id,{
+    method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)
+  });
 }
-document.querySelector("#add-item").onclick=async()=>{await api("/api/visits/"+visitId+"/items",{method:"POST"});load()};
+async function uploadFile(observationId,file,kind){
+  if(!file)return;
+  const form=new FormData();form.append("file",file);form.append("kind",kind);form.append("media_role",kind);
+  message.className="status";message.textContent=kind==="audio"?"Saving recording...":"Uploading photo...";
+  await api("/api/visits/"+visitId+"/observations/"+observationId+"/files",{method:"POST",body:form});
+  message.textContent=kind==="audio"?"Recording saved.":"Photo saved.";
+}
+async function recordAudio(button,observationId){
+  if(!navigator.mediaDevices||!window.MediaRecorder){
+    message.className="status error";message.textContent="Audio recording is not supported by this browser.";
+    return;
+  }
+  if(button._recorder&&button._recorder.state==="recording"){button._recorder.stop();return}
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    const recorder=new MediaRecorder(stream),chunks=[];
+    button._recorder=recorder;button.classList.add("recording");button.textContent="Stop recording";
+    message.className="status";message.textContent="Recording...";
+    recorder.ondataavailable=event=>{if(event.data.size)chunks.push(event.data)};
+    recorder.onstop=async()=>{
+      button.classList.remove("recording");button.textContent="Record voice";
+      stream.getTracks().forEach(track=>track.stop());
+      const type=recorder.mimeType||"audio/webm";
+      const extension=type.includes("mp4")?"m4a":type.includes("ogg")?"ogg":"webm";
+      try{
+        await uploadFile(observationId,new File(chunks,"voice-"+Date.now()+"."+extension,{type}),"audio");
+      }catch(error){message.className="status error";message.textContent=error.message}
+    };
+    recorder.start();
+  }catch(error){message.className="status error";message.textContent="Microphone access was not granted."}
+}
+async function load(){
+  try{
+    const data=await api("/api/visits/"+visitId+"/items");items.innerHTML="";
+    if(!data.length)items.innerHTML="<div class=empty><strong>No inspection items yet.</strong><br>Tap Add inspection item to begin.</div>";
+    data.forEach(item=>{
+      const card=document.createElement("article");card.className="item";
+      card.innerHTML="<div class=item-head><h2>Item "+item.number+"</h2><button data-add>Add observation</button></div><div data-list></div>";
+      card.querySelector("[data-add]").onclick=async event=>{
+        event.target.disabled=true;
+        try{
+          await api("/api/visits/"+visitId+"/items/"+item.id+"/observations",{
+            method:"POST",headers:{"Content-Type":"application/json"},body:"{}"
+          });await load();
+        }catch(error){message.className="status error";message.textContent=error.message;event.target.disabled=false}
+      };
+      item.observations.forEach(obs=>{
+        const row=document.createElement("section");row.className="observation";
+        row.innerHTML="<div class=observation-head><strong>Observation "+obs.sequence+"</strong>"+
+          "<label><input data-include type=checkbox "+(obs.include_in_report?"checked":"")+"> Include in report</label></div>"+
+          "<label>Description<textarea data-description placeholder='Describe what you observed'>"+safe(obs.description)+"</textarea></label>"+
+          "<div class=fields><label>Caption<input data-caption></label>"+
+          "<label>Severity<select data-severity><option value=''>Not set</option><option>Minor</option><option>Moderate</option><option>Major</option><option>Critical</option></select></label></div>"+
+          "<label>Recommended action<textarea data-action placeholder='Recommended action'>"+safe(obs.action)+"</textarea></label>"+
+          "<div class=media-actions><button data-save>Save notes</button><button class=secondary data-record>Record voice</button>"+
+          "<label class=secondary>Take or choose photo <input data-photo type=file accept='image/*' capture='environment' hidden></label></div>";
+        row.querySelector("[data-severity]").value=obs.severity||"";
+        row.querySelector("[data-caption]").value=obs.caption||"";
+        row.querySelector("[data-save]").onclick=async event=>{
+          event.target.disabled=true;
+          try{
+            await patchObservation(obs.id,{
+              description:row.querySelector("[data-description]").value,
+              caption:row.querySelector("[data-caption]").value,
+              severity:row.querySelector("[data-severity]").value||null,
+              action:row.querySelector("[data-action]").value
+            });message.className="status";message.textContent="Notes saved.";
+          }catch(error){message.className="status error";message.textContent=error.message}
+          finally{event.target.disabled=false}
+        };
+        row.querySelector("[data-include]").onchange=event=>patchObservation(obs.id,{include_in_report:event.target.checked});
+        row.querySelector("[data-record]").onclick=event=>recordAudio(event.target,obs.id);
+        row.querySelector("[data-photo]").onchange=async event=>{
+          try{await uploadFile(obs.id,event.target.files[0],"photo")}catch(error){message.className="status error";message.textContent=error.message}
+          event.target.value="";
+        };
+        card.querySelector("[data-list]").append(row);
+      });
+      items.append(card);
+    });
+  }catch(error){message.className="status error";message.textContent=error.message}
+}
+document.querySelector("#add-item").onclick=async event=>{
+  if(event.target.disabled)return;
+  event.target.disabled=true;
+  try{await api("/api/visits/"+visitId+"/items",{method:"POST"});await load()}
+  catch(error){message.className="status error";message.textContent=error.message}
+  finally{event.target.disabled=false}
+};
 document.querySelector("#archive").onclick=async()=>{
   message.textContent="Building archive...";
   const response=await api("/api/visits/"+visitId+"/exports/archive",{method:"POST"});
   const blob=await response.blob(), link=document.createElement("a");
-  link.href=URL.createObjectURL(blob);link.download="sitescribe_visit_complete.zip";link.click();
+  link.href=URL.createObjectURL(blob);link.download="mka_site_visit_complete.zip";link.click();
   URL.revokeObjectURL(link.href);message.textContent="";
 };
 load();
