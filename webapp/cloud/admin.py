@@ -12,7 +12,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from flask import Blueprint, g, jsonify, render_template, request
 
 from webapp.cloud.auth.blueprint import require_cloud_user
-from webapp.cloud.storage import BlobNotFoundError
+from webapp.cloud.storage import BlobNotFoundError, BlobStoreError
 
 
 NAMES = {"agents": "AGENTS.md", "template": "report_template.docx", "secret": "claude_api_key.enc"}
@@ -51,14 +51,14 @@ def create_admin_blueprint(auth, store):
         if api_key:
             encrypted = _cipher().encrypt(api_key.encode())
             store.put(_key(g.cloud_user.workspace_id, NAMES["secret"]), encrypted,
-                      content_type="application/octet-stream", overwrite=True)
+                      content_type="text/plain", overwrite=True)
             changed.append("Claude API key")
         agents = request.files.get("agents")
         if agents and agents.filename:
             if Path(agents.filename).name.lower() != "agents.md":
                 return jsonify(error="Instructions file must be named AGENTS.md"), 400
             store.put(_key(g.cloud_user.workspace_id, NAMES["agents"]), agents.stream,
-                      content_type="text/markdown", overwrite=True)
+                      content_type="text/plain", overwrite=True)
             changed.append("AGENTS.md")
         template = request.files.get("template")
         if template and template.filename:
@@ -114,16 +114,23 @@ def _key(workspace_id, filename):
 
 
 def _exists(store, key):
-    try:
-        store.stat(key); return True
-    except BlobNotFoundError:
+    path = _download_key(store, key)
+    if path is None:
         return False
+    try:
+        return True
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def _download(store, workspace_id, filename):
+    return _download_key(store, _key(workspace_id, filename))
+
+
+def _download_key(store, key):
     handle, name = tempfile.mkstemp(prefix="sitescribe-admin-")
     os.close(handle); path = Path(name)
     try:
-        return store.download_to(_key(workspace_id, filename), path)
-    except BlobNotFoundError:
+        return store.download_to(key, path)
+    except BlobStoreError:
         path.unlink(missing_ok=True); return None
