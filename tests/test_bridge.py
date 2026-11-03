@@ -1,6 +1,6 @@
 """bridge.to_project() and the Word export it feeds: capture entries through
 the Flask test client, export /api/export/docx, and check the report is the
-MKA default produced by sitescribe.word_report."""
+MKA default produced by the report builder."""
 
 import io
 import zipfile
@@ -194,7 +194,7 @@ def test_docx_export_falls_back_when_the_module_fails(client, monkeypatch):
     text = _text(Document(io.BytesIO(r.data)))
     assert "Cracked beam at C-4" in text        # the built-in report still ships
     assert "ITEM 1.1" not in text
-    notice = r.headers["X-SiteScribe-Report-Notice"]
+    notice = r.headers["X-MKA-Report-Notice"]
     assert "built-in report layout used" in notice and "simulated module bug" in notice
 
     # the two-step export the page uses says so too
@@ -219,7 +219,7 @@ def test_export_build_then_download(client):
     names = zipfile.ZipFile(io.BytesIO(r.data)).namelist()
     assert "Elm St _ Level 2/site_visit_report.docx" in names
     assert any(n.startswith("Elm St _ Level 2/plans/") for n in names)
-    assert "X-SiteScribe-Report-Notice" not in client.get("/api/export/docx").headers
+    assert "X-MKA-Report-Notice" not in client.get("/api/export/docx").headers
 
 
 def test_export_download_before_build_is_404(client):

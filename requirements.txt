@@ -17,5 +17,10 @@ pymupdf>=1.24        # plans.py: render plan pages to images
 # word_report.py:             python-docx (already above)
 docxtpl>=0.20        # word_report.py: firm templates with {{ }} tags (e.g. GFDS SOR template)
 pillow-heif>=0.16    # word_report.py: iPhone HEIC photos
+SQLAlchemy>=2.0      # cloud PostgreSQL models and repositories
+alembic>=1.13        # cloud schema migrations
+psycopg[binary]>=3.2 # Supabase PostgreSQL driver
+cryptography>=43     # encrypted server-side OAuth tokens
+boto3>=1.35          # versioned S3 file backups
 
 pytest

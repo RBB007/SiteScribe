@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#F5F5F3"><title>Visit overview</title>
+<link rel="manifest" href="/static/manifest.webmanifest"><style>
+:root{color-scheme:light;--bg:#F5F5F3;--card:#fff;--ink:#16181D;--mut:#5F636B;--line:#E8E8E4;--orange:#C2410C}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html{background:var(--bg);-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 Geist,Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+padding:0 16px calc(102px + env(safe-area-inset-bottom))}.wrap{max-width:390px;margin:auto}
+header{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:8px;margin:0 -16px;
+padding:calc(10px + env(safe-area-inset-top)) 16px 10px;background:rgba(245,245,243,.94);border-bottom:1px solid #EEEEEA;
+backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+button,a{font:inherit}.circle{width:44px;height:44px;min-width:44px;padding:0;border-radius:50%;display:grid;place-items:center;
+background:#fff;color:var(--ink);border:1px solid #D6D6D1}.circle svg,.pill svg,.item svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8}
+.spacer{flex:1}.pill{min-height:44px;border-radius:999px;padding:0 16px;display:flex;align-items:center;gap:7px;
+background:#fff;color:var(--ink);border:1px solid #D6D6D1;font-weight:650}
+.visitDate{margin-top:24px;color:var(--mut);font-size:13px;font-weight:650}.projectName{font-size:30px;line-height:1.08;
+font-weight:650;letter-spacing:-.035em;margin:6px 0 10px}.stats{font:12px/1.4 "Geist Mono","SFMono-Regular",Consolas,monospace;color:var(--mut)}
+.critical{color:var(--orange)}.sync{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--mut);margin-top:9px}
+.sync:before{content:"";width:7px;height:7px;border-radius:50%;background:#26734D}.sync.offline:before{background:#D97706}
+.listLabel{font-size:13px;font-weight:650;color:var(--mut);margin:25px 2px 9px}.items{display:grid;gap:9px}
+.item{min-height:80px;display:grid;grid-template-columns:56px 1fr 20px;align-items:center;gap:12px;padding:11px;
+background:#fff;border:1px solid var(--line);border-radius:16px;color:var(--ink);text-decoration:none}
+.thumb{width:56px;height:56px;border-radius:11px;background:#F0F0ED;overflow:hidden;display:grid;place-items:center}
+.thumb img{width:100%;height:100%;object-fit:cover}.thumb svg{width:22px;height:22px;stroke:#8A8D93}
+.itemNo{font:12px/1.2 "Geist Mono","SFMono-Regular",Consolas,monospace;font-weight:600}.severity{font-size:11px;color:var(--mut);margin-left:7px}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#8A8D93;margin-right:4px}.dot.med{background:#3B6FD8}
+.dot.high{background:#D97706}.dot.critical{background:var(--orange)}.summary{font-size:13px;color:var(--mut);white-space:nowrap;
+overflow:hidden;text-overflow:ellipsis;margin-top:6px}.chev{color:#8A8D93}.empty{padding:28px;text-align:center;background:#fff;border:1px dashed #C9C9C3;border-radius:16px;color:var(--mut)}
+.bottom{position:fixed;bottom:0;left:0;right:0;padding:9px 16px calc(9px + env(safe-area-inset-bottom));
+background:rgba(245,245,243,.95);border-top:1px solid #E1E1DC;backdrop-filter:blur(18px)}.bottom .wrap{display:flex;gap:9px}
+.action{min-height:50px;border-radius:999px;border:1px solid var(--ink);padding:0 20px;font-weight:650}
+.primary{flex:1;background:var(--ink);color:#fff}.secondary{background:#fff;color:var(--ink);border-color:#D6D6D1}
+input[type=file]{display:none}.message{font-size:12px;color:var(--mut);margin:12px 2px}
+</style></head><body><div class="wrap">
+<header><a class="circle" href="/" aria-label="All projects"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></a>
+<div class="spacer"></div><button class="pill" id="plans"><svg viewBox="0 0 24 24"><path d="m3 6 5-3 8 3 5-3v15l-5 3-8-3-5 3zM8 3v15M16 6v15"/></svg>Plans</button>
+<button class="circle" id="template" aria-label="Report template"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6zM14 3v4h4M9 12h6M9 16h6"/></svg></button></header>
+<div class="visitDate" id="visitDate">Site visit</div><h1 class="projectName" id="projectName">[Project name]</h1>
+<div class="stats" id="stats">0 items · 0 in report · <span class="critical">0 critical</span></div>
+<div class="sync" id="sync">Saved on this device</div><div class="listLabel">Items</div><main class="items" id="items"></main>
+<div class="message" id="message"></div></div>
+<input id="planInput" type="file" accept="application/pdf,image/*"><input id="tplInput" type="file" accept=".docx">
+<div class="bottom"><div class="wrap"><button class="action primary" id="newItem">+ New item</button>
+<button class="action secondary" id="export">Export</button></div></div>
+<script src="/static/offline.js"></script><script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+async function api(path,options={}){
+  const response=await OfflineStore.request(path,options);if(response?.queued)return {__queued:true};
+  if(response.status===401){location.href="/login";throw new Error("Unauthorized")}
+  if(response.status===409){location.href="/";throw new Error("No project open")}
+  const body=(response.headers.get("content-type")||"").includes("json")?await response.json():await response.text();
+  if(!response.ok)throw new Error(body?.error||response.statusText);return body;
+}
+function severity(item){const values=(item.photos||[]).map(p=>p.importance);
+  if(values.some(v=>v==="Critical"||v==="Safety"))return ["Critical","critical"];
+  if(values.includes("Major"))return ["High","high"];if(values.includes("Minor"))return ["Med","med"];return ["Low",""];
+}
+function render(data,project){
+  const items=data.items||[], critical=items.filter(i=>severity(i)[0]==="Critical").length;
+  const included=items.filter(i=>(i.photos||[]).some(p=>p.include)).length;
+  $("projectName").textContent=project?.name||"[Project name]";
+  const date=project?.created?new Date(project.created).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"}):"[Date]";
+  $("visitDate").textContent="Site visit · "+date;
+  $("stats").innerHTML=`${items.length} item${items.length===1?"":"s"} · ${included} in report · <span class="critical">${critical} critical</span>`;
+  $("items").innerHTML=items.length?items.map(item=>{const photo=(item.photos||[]).find(p=>p.filename)||(item.photos||[])[0]||{};
+    const [label,dot]=severity(item),summary=(photo.description||"[Observation summary]");
+    return `<a class="item" href="/capture?item=${encodeURIComponent(item.item_id)}">
+      <span class="thumb">${photo.url&&!photo.pending?`<img src="${esc(photo.url)}" alt="">`:`<svg viewBox="0 0 24 24"><path d="M4 7h3l1.5-2h7L17 7h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>`}</span>
+      <span><span class="itemNo">${esc(item.item_id)}</span><span class="severity"><i class="dot ${dot}"></i>${label}</span>
+      <span class="summary">${esc(summary)}</span></span><svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></a>`;
+  }).join(""):`<div class="empty">No items yet. Create one to start the visit.</div>`;
+}
+async function load(){
+  try{const [projects,visit]=await Promise.all([api("/api/projects"),api("/api/visit")]);
+    const project=projects.projects.find(p=>p.project_id===projects.current);render(visit,project);
+    await OfflineStore.cacheSet("current-visit",visit);await OfflineStore.cacheSet("current-project",project);}
+  catch(error){const visit=await OfflineStore.cacheGet("current-visit"),project=await OfflineStore.cacheGet("current-project");
+    if(visit){render(visit,project);$("message").textContent="Offline copy loaded."}else $("message").textContent=error.message;}
+}
+window.addEventListener("offline-status",event=>{const {count,online}=event.detail;
+  $("sync").className="sync "+(!online||count?"offline":"");$("sync").textContent=!online||count?`Offline · ${count} pending`:"Saved on this device";});
+$("newItem").onclick=async()=>{if(!navigator.onLine){$("message").textContent="Reconnect to start a new item.";return}
+  const item=await api("/api/item",{method:"POST"});location.href="/capture?item="+encodeURIComponent(item.item_id)};
+$("plans").onclick=()=>$("planInput").click();$("template").onclick=()=>$("tplInput").click();
+$("planInput").onchange=async event=>{const file=event.target.files[0];if(!file)return;const form=new FormData();form.append("plan",file);
+  await api("/api/plan",{method:"POST",body:form});$("message").textContent=navigator.onLine?"Plan uploaded.":"Plan saved · pending upload";event.target.value=""};
+$("tplInput").onchange=async event=>{const file=event.target.files[0];if(!file)return;const form=new FormData();form.append("template",file);
+  await api("/api/template",{method:"POST",body:form});$("message").textContent=navigator.onLine?"Template updated.":"Template saved · pending upload";event.target.value=""};
+$("export").onclick=async()=>{if(!navigator.onLine){$("message").textContent="Reconnect to export the latest report.";return}
+  const button=$("export");button.disabled=true;button.textContent="Building…";try{const result=await api("/api/export/build",{method:"POST",queue:false});location.href=result.url}
+  catch(error){$("message").textContent=error.message}finally{button.disabled=false;button.textContent="Export"}};
+load();if("serviceWorker" in navigator)navigator.serviceWorker.register("/service-worker.js").catch(()=>{});
+</script>
+</body></html>

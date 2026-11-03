@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>MKA Site-to-Report Projects</title>
+  <style>
+    :root{font:16px/1.5 system-ui;color:#182132;background:#f3f6fa}
+    *{box-sizing:border-box}body{margin:0}header{background:#102a43;color:white;padding:18px max(20px,5vw);
+    display:flex;justify-content:space-between;align-items:center}main{max-width:1100px;margin:auto;padding:28px 20px}
+    h1{font-size:1.5rem;margin:0}h2{margin:0}.muted{color:#66758a}.bar,.card{background:white;border:1px solid #dce3ec;
+    border-radius:14px;padding:18px}.bar{display:flex;gap:12px;margin:18px 0}.bar input{flex:1}
+    input,button{font:inherit;padding:11px 13px;border:1px solid #b9c5d4;border-radius:9px}
+    button{background:#1769e0;color:white;border-color:#1769e0;font-weight:650;cursor:pointer}
+    .projects{display:grid;gap:14px}.card{display:grid;grid-template-columns:1fr auto;gap:8px}
+    .card h3{margin:0}.visits{grid-column:1/-1;margin-top:8px}.visit{padding:9px 0;border-top:1px solid #edf0f4}
+    .danger{background:white;color:#a62d25;border-color:#d9a9a5}.error{color:#a62d25}
+    @media(max-width:600px){.bar{flex-direction:column}.card{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<header>
+  <h1>MKA Site-to-Report</h1>
+  <form method="post" action="/auth/logout"><button class="danger">Sign out</button></form>
+</header>
+<main>
+  <h2>Projects</h2>
+  <div class="muted">{{ user.email }} &middot; {{ user.role }}</div>
+  <form class="bar" id="new-project">
+    <input name="name" maxlength="300" required placeholder="Project name">
+    <input name="project_number" maxlength="100" placeholder="Project number">
+    <button>Create project</button>
+  </form>
+  <p id="message" class="error" role="alert"></p>
+  <section id="projects" class="projects" aria-live="polite"></section>
+</main>
+<script>
+const list=document.querySelector("#projects"), message=document.querySelector("#message");
+async function api(url,options={}) {
+  const response=await fetch(url,{headers:{"Content-Type":"application/json"},...options});
+  if(response.status===204)return null;
+  const body=await response.json();
+  if(!response.ok)throw new Error(body.error||"Request failed");
+  return body;
+}
+function safe(value){const node=document.createElement("span");node.textContent=value||"";return node.innerHTML}
+async function load(){
+  try{
+    const projects=await api("/api/projects"); list.innerHTML="";
+    for(const project of projects){
+      const card=document.createElement("article");card.className="card";
+      card.innerHTML="<div><h3>"+safe(project.name)+"</h3><div class=muted>"+
+        safe(project.project_number||"No project number")+"</div></div>"+
+        "<button class=danger data-archive>Archive</button><div class=visits>Loading visits...</div>";
+      card.querySelector("[data-archive]").onclick=async()=>{await api("/api/projects/"+project.id,{method:"DELETE"});load()};
+      list.append(card);
+      const visits=await api("/api/projects/"+project.id+"/visits");
+      const box=card.querySelector(".visits");
+      box.innerHTML="<strong>Visits</strong> <button data-add-visit>Add visit</button> "+
+        (visits.length?"":"<span class=muted>None yet</span>");
+      box.querySelector("[data-add-visit]").onclick=async()=>{
+        const date=prompt("Visit date (YYYY-MM-DD)",new Date().toISOString().slice(0,10));
+        if(!date)return;
+        await api("/api/projects/"+project.id+"/visits",{
+          method:"POST",body:JSON.stringify({visit_date:date})
+        });load();
+      };
+      visits.forEach(v=>{const row=document.createElement("div");row.className="visit";
+        row.innerHTML="<a href=/visits/"+v.id+">"+safe(v.visit_date)+
+          (v.report_number?" - "+safe(v.report_number):"")+"</a>";box.append(row)});
+    }
+  }catch(error){message.textContent=error.message}
+}
+document.querySelector("#new-project").onsubmit=async event=>{
+  event.preventDefault();message.textContent="";
+  const form=new FormData(event.target);
+  try{await api("/api/projects",{method:"POST",body:JSON.stringify(Object.fromEntries(form))});
+    event.target.reset();load()}catch(error){message.textContent=error.message}
+};
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>SiteScribe Visit</title>
+  <style>
+    :root{font:16px/1.5 system-ui;color:#182132;background:#f3f6fa}*{box-sizing:border-box}
+    body{margin:0}header{background:#102a43;color:#fff;padding:16px max(18px,4vw);display:flex;gap:18px;align-items:center}
+    header a{color:white}main{max-width:900px;margin:auto;padding:24px 16px}.actions{display:flex;gap:10px;flex-wrap:wrap}
+    button,input,textarea,select{font:inherit;padding:10px;border:1px solid #b9c5d4;border-radius:9px}
+    button{background:#1769e0;color:white;border:0;font-weight:650}.item{background:white;border:1px solid #dce3ec;
+    border-radius:14px;padding:16px;margin:14px 0}.observation{border-top:1px solid #e5e9ef;padding:14px 0}
+    textarea{width:100%;min-height:90px}.muted{color:#66758a}.error{color:#a62d25}
+  </style>
+</head>
+<body>
+<header><a href="/">&larr; Projects</a><strong>Field visit</strong></header>
+<main>
+  <div class="actions">
+    <button id="add-item">Add item</button>
+    <button id="archive">Download complete raw ZIP</button>
+  </div>
+  <p id="message" class="error" role="alert"></p>
+  <section id="items"></section>
+</main>
+<script>
+const visitId={{ visit_id|tojson }}, items=document.querySelector("#items"), message=document.querySelector("#message");
+async function api(url,options={}){
+  const response=await fetch(url,options);if(response.status===204)return null;
+  const type=response.headers.get("content-type")||"";
+  if(!type.includes("json")){if(response.ok)return response;throw new Error("Request failed")}
+  const body=await response.json();if(!response.ok)throw new Error(body.error||"Request failed");return body;
+}
+function safe(value){const node=document.createElement("span");node.textContent=value||"";return node.innerHTML}
+async function load(){
+  try{const data=await api("/api/visits/"+visitId+"/items");items.innerHTML="";
+    data.forEach(item=>{const card=document.createElement("article");card.className="item";
+      card.innerHTML="<h2>Item "+item.number+"</h2><button data-add>Add observation</button><div data-list></div>";
+      card.querySelector("[data-add]").onclick=async()=>{
+        const description=prompt("Observation description");if(description===null)return;
+        await api("/api/visits/"+visitId+"/items/"+item.id+"/observations",{
+          method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({description})
+        });load()};
+      item.observations.forEach(obs=>{const row=document.createElement("div");row.className="observation";
+        row.innerHTML="<strong>Observation "+obs.sequence+"</strong><p>"+safe(obs.description)+
+          "</p><label><input type=checkbox "+(obs.include_in_report?"checked":"")+"> Include in report</label>"+
+          "<div><input type=file accept='image/*,audio/*,.pdf' data-file></div>";
+        row.querySelector("input[type=checkbox]").onchange=async event=>{
+          await api("/api/visits/"+visitId+"/observations/"+obs.id,{
+            method:"PATCH",headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({include_in_report:event.target.checked})})};
+        row.querySelector("[data-file]").onchange=async event=>{
+          const form=new FormData();form.append("file",event.target.files[0]);form.append("kind","photo");
+          await api("/api/visits/"+visitId+"/observations/"+obs.id+"/files",{method:"POST",body:form});
+          message.textContent="Upload saved."};
+        card.querySelector("[data-list]").append(row)});items.append(card)});
+  }catch(error){message.textContent=error.message}
+}
+document.querySelector("#add-item").onclick=async()=>{await api("/api/visits/"+visitId+"/items",{method:"POST"});load()};
+document.querySelector("#archive").onclick=async()=>{
+  message.textContent="Building archive...";
+  const response=await api("/api/visits/"+visitId+"/exports/archive",{method:"POST"});
+  const blob=await response.blob(), link=document.createElement("a");
+  link.href=URL.createObjectURL(blob);link.download="sitescribe_visit_complete.zip";link.click();
+  URL.revokeObjectURL(link.href);message.textContent="";
+};
+load();
+</script>
+</body>
+</html>

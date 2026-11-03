@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="g" x1="80" y1="50" x2="430" y2="465" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4a597c"/>
+      <stop offset="1" stop-color="#161c2b"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#g)"/>
+  <rect y="424" width="512" height="88" fill="#aaba0a"/>
+  <text x="256" y="318" fill="#fff" font-family="Arial, sans-serif" font-size="172" font-weight="700" text-anchor="middle" letter-spacing="8">MKA</text>
+</svg>

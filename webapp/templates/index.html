@@ -3,68 +3,83 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>SiteScribe</title>
+<meta name="theme-color" content="#F5F5F3">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MKA Site-to-Report">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="icon" href="/static/app-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/app-icon.svg">
+<title>MKA Site-to-Report</title>
 <style>
 :root{
-  --bg:#fff;--fg:#14181d;--mut:#667085;--line:#e4e7ec;--card:#f9fafb;--card2:#f2f4f7;
-  --accent:#1554b8;--accent-fg:#fff;--ok:#067647;--bad:#b42318;--warn:#b54708;
+  color-scheme:light dark;
+  --bg:#f7f7f7;--fg:#222;--mut:#666;--line:#d9dce2;--card:#fff;--card2:#ededed;
+  --accent:#4a597c;--accent-fg:#fff;--accent-soft:#e8eaf0;--brand:#aaba0a;--ok:#919f09;--bad:#cc2e2e;--warn:#4a597c;
   --info:#5b6b7c;--minor:#2e7d32;--major:#b54708;--critical:#b42318;--safety:#6941c6;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 8px 26px rgba(25,39,66,.06);
 }
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]){
-  --bg:#0e1216;--fg:#e8eaed;--mut:#98a2b3;--line:#262c33;--card:#161a1f;--card2:#1d2227;
-  --accent:#4d8df0;--accent-fg:#06101f;--ok:#5fd09a;--bad:#ff8a80;--warn:#f5b26b;
+  --bg:#101521;--fg:#fff;--mut:#b9bfcb;--line:#303a50;--card:#161c2b;--card2:#1d2a48;
+  --accent:#738bc1;--accent-fg:#fff;--accent-soft:#263552;--brand:#aaba0a;--ok:#aaba0a;--bad:#ff8585;--warn:#b8c7e9;
   --info:#8fa0b0;--minor:#5fd09a;--major:#f5b26b;--critical:#ff8a80;--safety:#c3a6ff;
+  --shadow:0 1px 2px rgba(0,0,0,.16),0 10px 28px rgba(0,0,0,.18);
 }}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{background:var(--bg);-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--fg);
-  font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
-  padding:0 14px calc(90px + env(safe-area-inset-bottom))}
-.wrap{max-width:560px;margin:0 auto}
-header{display:flex;align-items:center;gap:10px;padding:14px 0 11px;
-  border-bottom:1px solid var(--line)}
-.back{flex:0 0 auto;display:grid;place-items:center;width:36px;height:36px;
-  border-radius:9px;background:var(--card2);border:1px solid var(--line);
-  color:var(--fg);text-decoration:none;font-size:23px;line-height:1}
-.projName{font-weight:700;font-size:16.5px;letter-spacing:-.015em;
+  font:16px/1.45 "futura-pt",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  padding:0 14px calc(106px + env(safe-area-inset-bottom));overscroll-behavior-y:none}
+.wrap{max-width:600px;margin:0 auto}
+header{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:10px;
+  margin:0 -14px;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;
+  background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid color-mix(in srgb,var(--line) 76%,transparent);
+  backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px)}
+.back{flex:0 0 auto;display:grid;place-items:center;width:42px;height:42px;
+  border-radius:0;background:var(--card);border:1px solid var(--line);box-shadow:0 1px 2px rgba(0,0,0,.04);
+  color:var(--accent);text-decoration:none;font-size:28px;line-height:1;padding-bottom:3px}
+.projName{font-weight:750;font-size:17px;letter-spacing:-.025em;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sub{color:var(--mut);font-size:12px}
-button{font:inherit;border:0;border-radius:9px;background:var(--accent);
-  color:var(--accent-fg);padding:11px 14px;font-weight:600;cursor:pointer}
-button.ghost{background:var(--card2);color:var(--fg);border:1px solid var(--line)}
-button.ghost:disabled{opacity:.35}
-button.danger{background:transparent;color:var(--bad);border:1px solid var(--line)}
-button.sm{padding:9px 10px;font-size:12.5px}
+.sub{color:var(--mut);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+button{font:inherit;min-height:44px;border:0;border-radius:0;background:var(--accent);
+  color:var(--accent-fg);padding:11px 15px;font-weight:650;cursor:pointer;touch-action:manipulation;
+  transition:transform .12s ease,filter .12s ease,opacity .12s ease}
+button:active{transform:scale(.97);filter:brightness(.96)}
+button:disabled{opacity:.38;cursor:default;transform:none}
+button.ghost{background:var(--card);color:var(--fg);border:1px solid var(--line)}
+button.danger{background:var(--card);color:var(--bad);border:1px solid var(--line)}
+button.sm{min-height:38px;padding:8px 10px;font-size:12px;border-radius:0}
 button.wide{width:100%}
-.nav{display:flex;align-items:center;gap:10px;margin-top:13px}
-.nav button{min-width:54px;font-size:19px;line-height:1;padding:12px 0;flex:0 0 auto}
+.nav{display:flex;align-items:center;gap:9px;margin-top:14px}
+.nav button{min-width:48px;font-size:17px;line-height:1;padding:11px 0;flex:0 0 auto}
 .nav .label{flex:1;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
-.nav .label small{display:block;font-weight:500;font-size:10.5px;color:var(--mut);
+.nav .label small{display:block;font-weight:650;font-size:10px;color:var(--mut);
   letter-spacing:.09em;text-transform:uppercase}
-.nav.item button{background:var(--accent);color:var(--accent-fg)}
-.nav.item button.itemDel{background:transparent;color:var(--bad);
-  border:1px solid var(--line);min-width:46px;font-size:16px}
+.nav.item{background:var(--card);border:1px solid var(--line);border-top:4px solid var(--brand);padding:6px;border-radius:0;box-shadow:var(--shadow)}
+.nav.item button{background:var(--accent-soft);color:var(--accent)}
+.nav.item button.itemDel{background:transparent;color:var(--bad);border:0;min-width:44px;font-size:16px}
 .nav.photo{margin-top:8px}
-.nav.photo button{background:var(--card2);color:var(--fg);border:1px solid var(--line);
-  font-size:15px;min-width:44px;padding:8px 0}
-.nav.photo .label{font-size:15px}
+.nav.photo button{background:transparent;color:var(--accent);border:0;font-size:21px;min-width:44px;padding:8px 0}
+.nav.photo .label{font-size:14px;color:var(--mut)}
 .idTag{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.02em}
-.photoBox{position:relative;background:var(--card2);border:1px solid var(--line);
-  border-radius:12px;margin-top:10px;overflow:hidden;min-height:190px;
-  display:flex;align-items:center;justify-content:center}
-.photoBox img{width:100%;display:block}
+.photoBox{position:relative;background:#18202b;border:1px solid var(--line);
+  border-radius:0;margin-top:12px;overflow:hidden;min-height:230px;aspect-ratio:4/3;
+  display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow)}
+.photoBox img{width:100%;height:100%;object-fit:contain;display:block}
 .empty{text-align:center;padding:30px 16px;color:var(--mut)}
-.empty p{margin:0 0 11px;font-size:13.5px}
+.empty p{margin:0 0 13px;font-size:14px}
 input[type=file]{display:none}
-textarea,input[type=text],select{width:100%;padding:11px;border:1px solid var(--line);
-  border-radius:9px;background:var(--bg);color:var(--fg);font:inherit}
-textarea{min-height:82px;resize:vertical}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;
-  padding:13px;margin-top:11px}
-.card h2{margin:0 0 9px;font-size:11px;letter-spacing:.07em;text-transform:uppercase;
+textarea,input[type=text],select{width:100%;padding:13px;border:1px solid var(--line);
+  border-radius:0;background:var(--card2);color:var(--fg);font:inherit;font-size:16px;outline:none}
+textarea:focus,input[type=text]:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 15%,transparent)}
+textarea{min-height:112px;resize:vertical}
+.card{background:var(--card);border:1px solid var(--line);border-radius:0;
+  padding:15px;margin-top:12px;box-shadow:var(--shadow)}
+.card h2{margin:0 0 11px;font-size:11px;letter-spacing:.085em;text-transform:uppercase;
   color:var(--mut);font-weight:700}
-.chips{display:flex;flex-wrap:wrap;gap:6px}
-.chip{padding:8px 12px;border-radius:999px;border:1.5px solid var(--line);
-  background:var(--bg);color:var(--mut);font-size:13px;font-weight:600;cursor:pointer}
+.chips{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.chip{min-width:0;min-height:40px;padding:8px 5px;border-radius:0;border:1px solid var(--line);
+  background:var(--card2);color:var(--mut);font-size:12px;font-weight:650;cursor:pointer}
 .chip[aria-pressed=true]{color:#fff;border-color:transparent}
 .chip[data-v=Info][aria-pressed=true]{background:var(--info)}
 .chip[data-v=Minor][aria-pressed=true]{background:var(--minor)}
@@ -72,8 +87,8 @@ textarea{min-height:82px;resize:vertical}
 .chip[data-v=Critical][aria-pressed=true]{background:var(--critical)}
 .chip[data-v=Safety][aria-pressed=true]{background:var(--safety)}
 .inc{display:flex;align-items:center;gap:11px;background:var(--card);
-  border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-top:11px}
-.inc .t{flex:1;font-size:13.5px;font-weight:600}
+  border:1px solid var(--line);border-radius:0;padding:13px 15px;margin-top:12px;box-shadow:var(--shadow)}
+.inc .t{flex:1;font-size:14px;font-weight:650}
 .inc .t small{display:block;font-weight:400;color:var(--mut);font-size:11.5px}
 .sw{position:relative;width:48px;height:29px;flex:0 0 auto}
 .sw input{opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
@@ -84,7 +99,7 @@ textarea{min-height:82px;resize:vertical}
 .sw input:checked+span::after{transform:translateX(19px)}
 .msg{font-size:12px;color:var(--mut);margin-top:7px;min-height:15px}
 .msg.ok{color:var(--ok)}.msg.bad{color:var(--bad)}.msg.warn{color:var(--warn)}
-.row{display:flex;gap:8px}.row>*{flex:1}
+.row{display:flex;gap:8px}.row>*{flex:1;min-width:0}
 .loc{display:flex;align-items:center;gap:11px}
 .loc canvas{width:72px;height:72px;border-radius:9px;border:1px solid var(--line);
   flex:0 0 auto;background:var(--card2)}
@@ -102,12 +117,13 @@ textarea{min-height:82px;resize:vertical}
   font-size:12px;color:var(--mut)}
 .tplBar b{color:var(--fg);font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tplBar .x{margin-left:auto;background:transparent;border:0;color:var(--bad);font-size:16px}
-.bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);
-  border-top:1px solid var(--line);padding:10px 14px calc(10px + env(safe-area-inset-bottom));z-index:40}
-.bar .wrap{display:flex;gap:8px}
-dialog{border:0;border-radius:14px;padding:0;background:var(--card);color:var(--fg);
-  max-width:94vw;width:600px}
-dialog::backdrop{background:rgba(0,0,0,.65)}
+.bar{position:fixed;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  border-top:1px solid color-mix(in srgb,var(--line) 76%,transparent);padding:9px 14px calc(9px + env(safe-area-inset-bottom));z-index:40;
+  backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px)}
+.bar .wrap{display:flex;gap:9px}.bar button{min-height:50px;border-radius:0}
+dialog{border:0;border-radius:0;padding:0;background:var(--card);color:var(--fg);
+  max-width:calc(100vw - 24px);width:600px;box-shadow:0 25px 80px rgba(0,0,0,.32)}
+dialog::backdrop{background:rgba(7,12,20,.62);backdrop-filter:blur(3px)}
 .dlgHead{display:flex;align-items:center;justify-content:space-between;gap:10px;
   padding:12px 14px;border-bottom:1px solid var(--line)}
 .dlgHead b{font-size:14.5px}
@@ -119,83 +135,168 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   border:1px solid var(--line);border-radius:11px;padding:13px;margin-bottom:9px}
 .opt b{display:block;font-size:14.5px;margin-bottom:2px}
 .opt span{font-size:12.5px;color:var(--mut);font-weight:400;line-height:1.45}
+@media(max-width:430px){
+  body{padding-left:12px;padding-right:12px}.chips{grid-template-columns:repeat(3,1fr)}
+  header{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}
+  header .sm{font-size:0;width:40px;padding:0}#btnPlans::after{content:"⌑";font-size:20px}#btnTemplate::after{content:"▤";font-size:18px}
+  .photoBox{min-height:215px}.loc{align-items:flex-start}
+  dialog{position:fixed;inset:auto 8px calc(8px + env(safe-area-inset-bottom));max-width:none;width:auto;margin:0;border-radius:0;border-top:5px solid var(--brand)}
+}
+@media(display-mode:standalone){header{padding-top:calc(8px + env(safe-area-inset-top))}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+
+/* Mobile field UI */
+:root{color-scheme:light;--bg:#F5F5F3;--fg:#16181D;--mut:#5F636B;--line:#E8E8E4;
+  --card:#FFFFFF;--card2:#F1F1EE;--accent:#16181D;--accent-fg:#FFFFFF;
+  --accent-soft:#F0F0ED;--orange:#C2410C;--ok:#26734D;--bad:#B42318;--warn:#8A4B12;
+  --shadow:0 1px 2px rgba(22,24,29,.04)}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){color-scheme:light;--bg:#F5F5F3;
+  --fg:#16181D;--mut:#5F636B;--line:#E8E8E4;--card:#FFFFFF;--card2:#F1F1EE;
+  --accent:#16181D;--accent-fg:#FFFFFF;--accent-soft:#F0F0ED;--ok:#26734D;--bad:#B42318;--warn:#8A4B12}}
+body{font-family:Geist,Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  padding:0 16px calc(102px + env(safe-area-inset-bottom));background:var(--bg)}
+.wrap{max-width:390px}.mono,.idTag{font-family:"Geist Mono","SFMono-Regular",Consolas,monospace}
+header{margin:0 -16px;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;background:rgba(245,245,243,.94)}
+.back,.iconBtn{width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border-radius:50%;
+  display:grid;place-items:center;background:#fff;color:var(--fg);border:1px solid #D6D6D1}
+.iconBtn svg,.back svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
+.headerActions{display:flex;gap:8px}.projName{font-size:16px;font-weight:650;letter-spacing:-.01em}
+.sub{font-size:12px;color:var(--mut);margin-top:1px}
+button{border-radius:999px;min-height:44px;background:var(--fg);font-weight:650}
+button.ghost,button.danger{background:#fff;border-color:#D6D6D1}
+.stepper{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;margin:18px 0 14px}
+.stepper .stepText{text-align:center}.stepper .stepNo{font-size:36px;line-height:1;font-weight:600;letter-spacing:-.05em}
+.stepper .stepCount{font-size:12px;color:var(--mut);margin-top:5px}
+.stepper button{border-radius:50%;padding:0;background:#fff;color:var(--fg);border:1px solid #D6D6D1;font-size:25px}
+.photoBox{height:268px;min-height:268px;aspect-ratio:auto;border:1px dashed #C9C9C3;border-radius:16px;
+  background:#fff;box-shadow:none;margin-top:0}.photoBox img{object-fit:cover}
+.uploadBadge{position:absolute;right:10px;top:10px;display:flex;align-items:center;gap:5px;padding:6px 9px;
+  border-radius:999px;background:rgba(255,255,255,.94);color:#26734D;font-size:11px;font-weight:650}
+.uploadBadge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.uploadBadge.pending{color:#9A5704}
+.empty{width:100%;padding:24px 16px;color:var(--mut)}.empty svg{width:30px;height:30px;stroke:var(--fg);
+  fill:none;stroke-width:1.6;margin-bottom:9px}.empty strong{display:block;color:var(--fg);font-size:15px;margin-bottom:14px}
+.photoEmptyActions{display:flex;justify-content:center;gap:8px}.photoEmptyActions button{padding:10px 18px}
+.photoNav{margin:5px 0 0}.photoActions{margin-top:8px}.photoActions button{font-size:13px}
+.syncState{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--mut);margin-top:2px}
+.syncState::before{content:"";width:7px;height:7px;border-radius:50%;background:#26734D}
+.syncState.saving::before{background:#D97706}.syncState.offline::before{background:#D97706}
+.settings{background:#fff;border:1px solid var(--line);border-radius:16px;margin-top:16px;overflow:hidden}
+.settingRow{min-height:72px;display:flex;align-items:center;gap:12px;padding:13px 14px}
+.settingRow+.settingRow{border-top:1px solid #EEEEEA}.settingIcon{width:22px;height:22px;stroke:var(--fg);fill:none;stroke-width:1.7}
+.settingText{flex:1;min-width:0}.settingTitle{font-size:14px;font-weight:650}.settingHint{font-size:12px;color:var(--mut);margin-top:2px}
+.settingChevron{width:18px;height:18px;stroke:var(--mut);fill:none;stroke-width:1.8}
+.sw{width:48px;height:28px}.sw span{background:#D6D6D1}.sw input:checked+span{background:var(--fg)}
+.sw span::after{width:22px;height:22px}.sw input:checked+span::after{transform:translateX(20px)}
+.sectionLabel{font-size:13px;font-weight:650;color:var(--mut);margin:20px 2px 8px;text-transform:none;letter-spacing:0}
+.descriptionCard,.tagsCard{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.descriptionCard textarea{min-height:132px;padding:14px;border:0;border-radius:0;background:#fff;box-shadow:none}
+.descriptionTools{min-height:58px;border-top:1px solid #EEEEEA;display:flex;align-items:center;padding:7px 9px 7px 14px;gap:8px}
+.descriptionTools .tx{flex:1;margin:0;align-items:center;font-size:12px}.descriptionTools .tx input{width:18px;height:18px;margin:0}
+.roundTool{width:44px;height:44px;min-width:44px;padding:0;border-radius:50%;background:#fff!important;color:var(--fg)!important;
+  border:1px solid #D6D6D1!important;display:grid;place-items:center}.roundTool svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.8}
+.recordDot{width:10px;height:10px;border-radius:50%;background:var(--orange)}
+.importance{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;background:#ECECE8;border-radius:12px;padding:3px}
+.importance .chip{min-height:42px;border:0;border-radius:9px;background:transparent;color:var(--mut);font-size:12px}
+.importance .chip[aria-pressed=true]{background:#fff;color:var(--fg);box-shadow:0 1px 3px rgba(22,24,29,.12)}
+.importance .chip[data-v=Critical][aria-pressed=true]{background:var(--orange);color:#fff}
+.sevDot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;background:#8A8D93}
+.sevDot.med{background:#3B6FD8}.sevDot.high{background:#D97706}.sevDot.critical{background:var(--orange)}
+.tagsCard{padding:10px;display:flex;gap:7px;align-items:center;flex-wrap:wrap}.tagChip{display:flex;align-items:center;gap:5px;
+  min-height:34px;padding:6px 9px;background:#F0F0ED;border-radius:999px;font-size:12px}.tagChip button{min-height:20px;width:20px;padding:0;
+  background:transparent;color:var(--mut);font-size:16px}.tagInput{flex:1;min-width:100px!important;padding:8px!important;border:0!important;
+  background:transparent!important;box-shadow:none!important}.quietDelete{display:flex;margin:24px auto 4px;align-items:center;gap:7px;
+  background:transparent;color:var(--mut);font-size:13px}.quietDelete svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.7}
+.bar{background:rgba(245,245,243,.95);border-color:#E1E1DC}.bar .wrap{max-width:390px}.bar button{min-height:50px}
+.bar .ghost{flex:.72!important}.msg{font-size:12px}.card{box-shadow:none}.tplBar{border-radius:16px}
 </style>
 </head>
 <body>
 <div class="wrap">
 
 <header>
-  <a class="back" href="/" title="All reports">&lsaquo;</a>
+  <a class="back" href="/overview" title="Visit overview" aria-label="Visit overview">
+    <svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></a>
   <div style="flex:1;min-width:0">
     <div class="projName" id="projName">&nbsp;</div>
-    <div class="sub" id="visitSub">Loading…</div>
+    <div class="sub" id="visitSub">Site visit</div>
+    <div class="syncState" id="syncState">Saved</div>
   </div>
-  <div style="display:flex;gap:6px;flex:0 0 auto">
-    <button class="ghost sm" id="btnPlans">Plans</button>
-    <button class="ghost sm" id="btnTemplate">Template</button>
+  <div class="headerActions">
+    <button class="iconBtn" id="btnPlans" aria-label="Plans">
+      <svg viewBox="0 0 24 24"><path d="m3 6 5-3 8 3 5-3v15l-5 3-8-3-5 3zM8 3v15M16 6v15"/></svg></button>
+    <button class="iconBtn" id="btnTemplate" aria-label="More options">
+      <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/></svg></button>
   </div>
 </header>
 
-<div class="nav item">
-  <button id="itemPrev" aria-label="Previous item">&#9664;</button>
-  <div class="label" id="itemLabel"><small>Item</small>—</div>
-  <button id="itemNext" aria-label="Next item">&#9654;</button>
-  <button class="danger itemDel" id="btnDelItem" title="Delete this item">&#128465;</button>
+<div class="stepper">
+  <button id="itemPrev" aria-label="Previous item">&#8249;</button>
+  <div class="stepText" id="itemLabel"><div class="stepNo mono">--</div><div class="stepCount">of 0 items</div></div>
+  <button id="itemNext" aria-label="Next item">&#8250;</button>
 </div>
 
 <div class="photoBox" id="photoBox"></div>
 
-<div class="nav photo">
+<div class="nav photo photoNav">
   <button id="photoPrev" aria-label="Previous photo">&#8592;</button>
   <div class="label idTag" id="photoLabel">—</div>
   <button id="photoNext" aria-label="Next photo">&#8594;</button>
 </div>
-<div class="row" style="margin-top:8px">
-  <button id="btnTake">&#128247; Take photo</button>
-  <button class="ghost" id="btnChoose">&#128449; Choose</button>
-  <button class="danger" id="btnDelPhoto" style="flex:0 0 auto">&#128465;</button>
+<div class="row photoActions">
+  <button id="btnTake">Camera</button>
+  <button class="ghost" id="btnChoose">Library</button>
+  <button class="roundTool" id="btnDelPhoto" aria-label="Delete photo" style="flex:0 0 44px">
+    <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5M14 11v5"/></svg></button>
 </div>
 <input type="file" accept="image/*" capture="environment" id="camInput">
 <input type="file" accept="image/*" id="libInput">
 <input type="file" accept="application/pdf,image/*" id="planInput">
 <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" id="tplInput">
 
-<div class="inc">
-  <div class="t">Include in report
-    <small id="incHint">This incident will appear in the Word report</small></div>
-  <label class="sw"><input type="checkbox" id="include" checked><span></span></label>
-</div>
-
-<div class="card">
-  <h2>Location on plan <span style="text-transform:none;letter-spacing:0">(optional)</span></h2>
-  <div id="locBody"></div>
-</div>
-
-<div class="card">
-  <h2>Description</h2>
-  <textarea id="desc" placeholder="Describe this incident — or dictate it."></textarea>
-  <div class="row" style="margin-top:8px">
-    <button id="btnDictate">&#127908; Dictate</button>
-    <button class="ghost" id="btnRec">● Record audio</button>
+<div class="settings">
+  <div class="settingRow">
+    <svg class="settingIcon" viewBox="0 0 24 24"><path d="M5 12.5 9.5 17 19 7.5"/></svg>
+    <div class="settingText"><div class="settingTitle">Include in report</div>
+      <div class="settingHint" id="incHint">Will appear in the Word report</div></div>
+    <label class="sw"><input type="checkbox" id="include" checked><span></span></label>
   </div>
-  <label class="tx"><input type="checkbox" id="txToggle">
-    <span>Transcribe recordings to text (needs an API key — off = keep audio only)</span></label>
+  <div class="settingRow" id="locationRow">
+    <svg class="settingIcon" viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+    <div class="settingText" id="locBody"><div class="settingTitle">Location on plan</div>
+      <div class="settingHint">Optional · tap to drop a pin</div></div>
+    <svg class="settingChevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
+  </div>
+</div>
+
+<div class="sectionLabel">Description</div>
+<div class="descriptionCard">
+  <textarea id="desc" placeholder="What did you observe?"></textarea>
+  <div class="descriptionTools">
+    <label class="tx"><input type="checkbox" id="txToggle"><span>Transcribe audio</span></label>
+    <button class="roundTool" id="btnDictate" aria-label="Dictate">
+      <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/></svg></button>
+    <button class="roundTool" id="btnRec" aria-label="Record audio"><span class="recordDot"></span></button>
+  </div>
   <div id="clips"></div>
   <div class="msg" id="recMsg"></div>
 </div>
 
-<div class="card">
-  <h2>Importance</h2>
-  <div class="chips" id="impChips"></div>
-</div>
+<div class="sectionLabel">Importance</div>
+<div class="importance" id="impChips"></div>
 
-<div class="card">
-  <h2>Tags</h2>
-  <input type="text" id="tags" placeholder="comma, separated, tags">
+<div class="sectionLabel">Tags</div>
+<div class="tagsCard" id="tagsCard">
+  <div id="tagChips" style="display:contents"></div>
+  <input class="tagInput" type="text" id="tags" placeholder="Add tag" aria-label="Add tag">
 </div>
 
 <div id="tplBar"></div>
 <div class="msg" id="status"></div>
+<button class="quietDelete" id="btnDelItem">
+  <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5M14 11v5"/></svg>
+  Delete item
+</button>
 </div>
 
 <div class="bar"><div class="wrap">
@@ -225,7 +326,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
       <canvas id="planCanvas"></canvas>
       <div class="pin" id="planPin" hidden>
         <svg viewBox="0 0 24 24" width="26" height="26">
-          <path d="M12 0C7 0 3 4 3 9c0 6.5 9 15 9 15s9-8.5 9-15c0-5-4-9-9-9z" fill="#e5484d"/>
+          <path d="M12 0C7 0 3 4 3 9c0 6.5 9 15 9 15s9-8.5 9-15c0-5-4-9-9-9z" fill="#16181D"/>
           <circle cx="12" cy="9" r="3.4" fill="#fff"/></svg>
       </div>
     </div>
@@ -233,13 +334,19 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   </div>
 </dialog>
 
+<script src="/static/offline.js"></script>
 <script type="module">
 import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs";
 
 const $ = id => document.getElementById(id);
-const IMPORTANCE = ["Info","Minor","Major","Critical","Safety"];
+const IMPORTANCE = [
+  {v:"Info",label:"Low",dot:""},
+  {v:"Minor",label:"Med",dot:"med"},
+  {v:"Major",label:"High",dot:"high"},
+  {v:"Critical",label:"Critical",dot:"critical"}
+];
 const esc = s => String(s).replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -251,7 +358,8 @@ const item  = () => items[ii] || null;
 const entry = () => { const it = item(); return it && it.photos[pi] || null; };
 
 async function api(path, opts={}){
-  const res = await fetch(path, opts);
+  const res = await OfflineStore.request(path, opts);
+  if (res?.queued) return {__queued:true};
   if (res.status === 401){ location.href = "/login"; throw new Error("unauthorized"); }
   if (res.status === 409){ location.href = "/"; throw new Error("no project open"); }
   const ct = res.headers.get("content-type") || "";
@@ -260,25 +368,29 @@ async function api(path, opts={}){
   return body;
 }
 const say = (t,c="") => { $('status').className = "msg "+c; $('status').textContent = t; };
+const saveDraft = () => OfflineStore.cacheSet("current-visit",{items,plans,saved:Date.now()});
+let hadPending=false;
+window.addEventListener("offline-status",ev=>{
+  const {mode,count,online}=ev.detail, el=$('syncState');
+  if(count)hadPending=true;
+  el.className="syncState "+(!online||count?"offline":mode==="saving"?"saving":"");
+  el.textContent=!online||count?`Offline · ${count} pending`:mode==="saving"?"Saving":"Saved";
+  if(hadPending&&online&&!count&&mode==="saved"){hadPending=false;load().catch(()=>{});}
+});
 
 /* ---------------- render ---------------- */
 function render(){
   const it = item(), e = entry();
-  const incidents = items.reduce((n,x)=>n+x.photos.length,0);
-  const included  = items.reduce((n,x)=>n+x.photos.filter(p=>p.include).length,0);
-  $('visitSub').textContent =
-    `${items.length} item${items.length===1?"":"s"} · ${incidents} incident${incidents===1?"":"s"} · ${included} in report`;
-
   $('itemLabel').innerHTML = it
-    ? `<small>Item</small><span class="idTag">${it.item_id}</span>
-       <span style="color:var(--mut);font-weight:500;font-size:13px">${ii+1}/${items.length}</span>`
-    : `<small>Item</small>—`;
+    ? `<div class="stepNo mono">${String(it.item_id).padStart(2,"0")}</div>
+       <div class="stepCount">of ${items.length} item${items.length===1?"":"s"}</div>`
+    : `<div class="stepNo mono">--</div><div class="stepCount">of 0 items</div>`;
   $('itemPrev').disabled = ii <= 0;
   $('itemNext').disabled = ii >= items.length - 1;
 
   if (!it){
     $('photoBox').innerHTML =
-      `<div class="empty"><p>No items yet.</p><button id="first">+ New item</button></div>`;
+      `<div class="empty"><strong>No items yet</strong><button id="first">+ New item</button></div>`;
     $('first').onclick = newItem;
     $('photoLabel').textContent = "—";
     $('locBody').innerHTML = ""; $('clips').innerHTML = "";
@@ -290,8 +402,8 @@ function render(){
    'desc','tags','btnDictate','btnRec'].forEach(id => $(id).disabled = false);
 
   if (!e){
-    $('photoBox').innerHTML = `<div class="empty"><p>No photo entries.</p>
-      <button id="addFirst">&#128247; Take photo</button></div>`;
+    $('photoBox').innerHTML = `<div class="empty"><strong>No photos yet</strong>
+      <button id="addFirst">Camera</button></div>`;
     $('addFirst').onclick = () => { pendingSource = "cam"; addEntry("clear"); };
     $('photoLabel').textContent = "—";
     return;
@@ -299,19 +411,28 @@ function render(){
 
   /* image */
   if (e.filename){
-    $('photoBox').innerHTML = `<img src="${e.url}" alt="">`;
+    const preview=e.pending&&String(e.url||"").startsWith("blob:")
+      ? `<img src="${e.url}" alt="">`
+      : e.pending ? `<div class="empty"><strong>Photo saved on this device</strong></div>`
+                  : `<img src="${e.url}" alt="">`;
+    $('photoBox').innerHTML = preview+`<span class="uploadBadge ${e.pending?"pending":""}">
+      ${e.pending?"Pending upload":"Uploaded"}</span>`;
+    document.querySelector('.photoActions').style.display = "flex";
   } else {
     $('photoBox').innerHTML = `<div class="empty">
-      <p>No image on <span class="idTag">${e.photo_id}</span> yet</p>
-      <div class="row" style="max-width:320px;margin:0 auto">
-        <button id="shootCam">&#128247; Take photo</button>
-        <button class="ghost" id="shootLib">&#128449; Choose</button>
+      <svg viewBox="0 0 24 24"><path d="M4 7h3l1.5-2h7L17 7h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      <strong>No photos yet</strong>
+      <div class="photoEmptyActions">
+        <button id="shootCam">Camera</button>
+        <button class="ghost" id="shootLib">Library</button>
       </div></div>`;
+    document.querySelector('.photoActions').style.display = "none";
     $('shootCam').onclick = () => pick("cam");
     $('shootLib').onclick = () => pick("lib");
   }
 
   const n = it.photos.length;
+  document.querySelector('.photoNav').style.display = n > 1 ? "flex" : "none";
   $('photoLabel').innerHTML =
     `${e.photo_id} <span style="color:var(--mut);font-weight:500;font-size:12px">${pi+1}/${n}</span>`;
   $('photoPrev').disabled = pi <= 0;
@@ -320,34 +441,41 @@ function render(){
   /* per-incident fields */
   $('include').checked = e.include;
   $('incHint').textContent = e.include
-    ? "This incident will appear in the Word report"
-    : "Excluded — will NOT appear in the report";
+    ? "Will appear in the Word report"
+    : "Excluded from the report";
   $('desc').value = e.description || "";
-  $('tags').value = (e.tags || []).join(", ");
+  $('tags').value = "";
+  renderTagChips();
 
-  $('impChips').innerHTML = IMPORTANCE.map(v =>
-    `<button class="chip" data-v="${v}" aria-pressed="${e.importance===v}">${v}</button>`).join("");
+  $('impChips').innerHTML = IMPORTANCE.map(x => {
+    const active = e.importance===x.v || (x.v==="Critical" && e.importance==="Safety");
+    return `<button class="chip" data-v="${x.v}" aria-pressed="${active}">
+      <span class="sevDot ${x.dot}"></span>${x.label}</button>`;
+  }).join("");
   [...$('impChips').children].forEach(b => b.onclick = () => patch({importance:b.dataset.v}));
 
   if (e.location){
     const p = plans.find(x => x.plan_id === e.location.plan_id);
     $('locBody').innerHTML =
-      `<div class="loc"><canvas id="locThumb" width="72" height="72"></canvas>
-       <div class="d"><b style="color:var(--fg)">${p?esc(p.name):"plan"}</b><br>
-       page ${e.location.page} · x ${e.location.x.toFixed(3)} · y ${e.location.y.toFixed(3)}</div>
-       <button class="ghost sm" id="locEdit">Change</button></div>`;
-    $('locEdit').onclick = openPlan;
-    const c = $('locThumb'), ctx = c.getContext('2d');
-    ctx.fillStyle="#8884"; ctx.fillRect(0,0,72,72);
-    ctx.fillStyle="#e5484d"; ctx.beginPath();
-    ctx.arc(e.location.x*72, e.location.y*72, 6, 0, 7); ctx.fill();
-    ctx.strokeStyle="#fff"; ctx.lineWidth=2; ctx.stroke();
+      `<div class="settingTitle">Location on plan</div>
+       <div class="settingHint">${p?esc(p.name):"Plan"} · page ${e.location.page}</div>`;
   } else {
-    $('locBody').innerHTML = `<button class="ghost wide" id="locPick">Pick location on plan</button>`;
-    $('locPick').onclick = openPlan;
+    $('locBody').innerHTML = `<div class="settingTitle">Location on plan</div>
+      <div class="settingHint">Optional · tap to drop a pin</div>`;
   }
 
   renderClips();
+}
+
+$('locationRow').onclick = openPlan;
+
+function renderTagChips(){
+  const e=entry(), tags=(e&&e.tags)||[];
+  $('tagChips').innerHTML=tags.map((tag,i)=>`<span class="tagChip">[${esc(tag)}]
+    <button type="button" data-i="${i}" aria-label="Remove ${esc(tag)}">&times;</button></span>`).join("");
+  [...$('tagChips').querySelectorAll('button')].forEach(b=>b.onclick=()=>{
+    const next=tags.filter((_,i)=>i!==Number(b.dataset.i)); patch({tags:next});
+  });
 }
 
 function renderClips(){
@@ -369,12 +497,20 @@ function renderClips(){
 async function load(){
   api('/api/projects').then(r => {
     const p = r.projects.find(x => x.project_id === r.current);
-    $('projName').textContent = p ? p.name : "SiteScribe";
-    document.title = p ? `${p.name} — SiteScribe` : "SiteScribe";
+    $('projName').textContent = p ? p.name : "MKA Site-to-Report";
+    const date = p?.created ? new Date(p.created).toLocaleDateString(undefined,
+      {month:"short",day:"numeric",year:"numeric"}) : "";
+    $('visitSub').textContent = "Site visit" + (date ? " · " + date : "");
+    document.title = p ? `${p.name} - MKA Site-to-Report` : "MKA Site-to-Report";
   }).catch(()=>{});
   loadTemplate();
-  const d = await api('/api/visit');
+  let d;
+  try{d=await api('/api/visit');await OfflineStore.cacheSet("current-visit",d);}
+  catch(error){d=await OfflineStore.cacheGet("current-visit");if(!d)throw error;
+    say("Offline copy loaded. Changes will upload when connected.","warn");}
   items = d.items; plans = d.plans;
+  const wanted = new URLSearchParams(location.search).get("item");
+  if (wanted){ const at=items.findIndex(x=>x.item_id===wanted); if(at>=0) ii=at; }
   if (ii >= items.length) ii = Math.max(0, items.length-1);
   const it = item(); if (it && pi >= it.photos.length) pi = Math.max(0, it.photos.length-1);
   render();
@@ -383,20 +519,22 @@ async function load(){
 /* patch the current incident */
 async function patch(fields){
   const it = item(), e = entry(); if (!it || !e) return;
-  Object.assign(e, await api(`/api/item/${it.item_id}/photo/${e.photo_id}`, {
+  const result=await api(`/api/item/${it.item_id}/photo/${e.photo_id}`, {
     method:"PATCH", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify(fields)}));
-  render();
+    body: JSON.stringify(fields)});
+  Object.assign(e,result.__queued?fields:result);saveDraft();render();
 }
 
 async function newItem(){
+  if(!navigator.onLine)return say("Reconnect to start a new item. This draft is safe on your device.","warn");
   const it = await api('/api/item', {method:"POST"});
-  items.push(it); ii = items.length-1; pi = 0;
+  items.push(it); ii = items.length-1; pi = 0;saveDraft();
   render(); say(`Created item ${it.item_id}`,"ok");
 }
 
 async function addEntry(mode){
   const it = item(); if (!it) return;
+  if(!navigator.onLine)return say("Reconnect to add another photo. Current edits are safe.","warn");
   const fd = new FormData(); fd.append("inherit", mode);
   const e = await api(`/api/item/${it.item_id}/photo`, {method:"POST", body:fd});
   it.photos.push(e); pi = it.photos.length-1;
@@ -424,7 +562,7 @@ $('btnDelItem').onclick = async () => {
   items.splice(ii,1);
   if (ii >= items.length) ii = Math.max(0, items.length-1);
   pi = 0;
-  render(); say(`Item ${it.item_id} deleted.`,"ok");
+  saveDraft();render(); say(`Item ${it.item_id} deleted.`,"ok");
 };
 
 /* Camera and library are separate inputs: `capture` sends you straight into
@@ -466,10 +604,14 @@ async function onPicked(ev){
   const target = entry(); if (target && !target.filename) fd.append("photo_id", target.photo_id);
   say("Uploading photo…","warn");
   const e = await api(`/api/item/${item().item_id}/photo`, {method:"POST", body:fd});
+  if(e.__queued){
+    const target=entry();target.filename=f.name;target.url=URL.createObjectURL(f);target.pending=true;
+    saveDraft();render();say("Photo saved on this device · pending upload","warn");return;
+  }
   const it = item(), at = it.photos.findIndex(p => p.photo_id === e.photo_id);
   if (at >= 0) it.photos[at] = e; else it.photos.push(e);
   pi = it.photos.findIndex(p => p.photo_id === e.photo_id);
-  render(); say(`Photo on ${e.photo_id}`,"ok");
+  saveDraft();render(); say(`Photo on ${e.photo_id}`,"ok");
 }
 $('camInput').onchange = onPicked;
 $('libInput').onchange = onPicked;
@@ -478,15 +620,20 @@ $('btnDelPhoto').onclick = async () => {
   const it = item(), e = entry(); if (!e) return;
   if (!confirm(`Delete incident ${e.photo_id}?\nIts photo, audio and details go with it.`)) return;
   await api(`/api/item/${it.item_id}/photo/${e.photo_id}`, {method:"DELETE"});
-  it.photos.splice(pi,1); pi = Math.max(0, pi-1);
+  it.photos.splice(pi,1); pi = Math.max(0, pi-1);saveDraft();
   render(); say("Deleted.","ok");
 };
 
 $('include').onchange = ev => patch({include: ev.target.checked});
 let dT; $('desc').oninput = () => { clearTimeout(dT);
   dT = setTimeout(()=>patch({description:$('desc').value}), 700); };
-let tT; $('tags').oninput = () => { clearTimeout(tT); tT = setTimeout(()=>
-  patch({tags: $('tags').value.split(",").map(s=>s.trim()).filter(Boolean)}), 700); };
+$('tags').onkeydown = ev => {
+  if (ev.key!=="Enter" && ev.key!==",") return;
+  ev.preventDefault();
+  const value=$('tags').value.trim().replace(/,$/,""); if(!value) return;
+  const tags=[...(entry().tags||[])]; if(!tags.includes(value)) tags.push(value);
+  $('tags').value=""; patch({tags});
+};
 
 /* ---------------- dictation ---------------- */
 
@@ -551,7 +698,7 @@ $('btnDictate').onclick = () => {
   baseText = $('desc').value;
   if (baseText && !/\s$/.test(baseText)) baseText += " ";
   finalText = "";
-  sr.onstart = () => { dictating=true; $('btnDictate').textContent="■ Stop dictating";
+  sr.onstart = () => { dictating=true; $('btnDictate').setAttribute("aria-label","Stop dictating");
     $('recMsg').className="msg warn"; $('recMsg').textContent="Listening — speak now."; };
   /* Rebuild from the whole results list every time. Several mobile browsers
      report resultIndex as 0 on every event, so appending incrementally
@@ -582,7 +729,7 @@ $('btnDictate').onclick = () => {
       finalText = "";
       try { sr.start(); return; } catch (e) { /* fall through and stop */ }
     }
-    dictating = false; $('btnDictate').innerHTML = "&#127908; Dictate";
+    dictating = false; $('btnDictate').setAttribute("aria-label","Dictate");
     /* keep only finalised speech; drop any trailing interim guess */
     $('desc').value = (baseText + finalText.replace(/\s+/g, " ").trimStart()).trimEnd();
     patch({description: $('desc').value});
@@ -619,6 +766,8 @@ $('btnRec').onclick = async () => {
           const r = await api(
             `/api/item/${item().item_id}/photo/${entry().photo_id}/audio`,
             {method:"POST", body:fd});
+          if(r.__queued){$('recMsg').className="msg warn";
+            $('recMsg').textContent="Recording saved on this device · pending upload";return;}
           (entry().audio_clips ||= []).push(r.clip);
           if (r.description){ entry().description = r.description; $('desc').value = r.description; }
           renderClips();
@@ -630,11 +779,11 @@ $('btnRec').onclick = async () => {
                        : `Saved ${r.clip.clip_id} (${kb} KB). Audio kept, not transcribed.`;
         }catch(err){ $('recMsg').className="msg bad"; $('recMsg').textContent=err.message; }
       };
-      mr.start(); rec=true; $('btnRec').textContent="■ Stop";
+      mr.start(); rec=true; $('btnRec').setAttribute("aria-label","Stop recording");
       $('recMsg').className="msg warn"; $('recMsg').textContent="Recording…";
     }catch(err){ $('recMsg').className="msg bad";
       $('recMsg').textContent = err.name==="NotAllowedError" ? "Mic permission denied." : err.name; }
-  } else { mr.stop(); rec=false; $('btnRec').textContent="● Record audio"; }
+  } else { mr.stop(); rec=false; $('btnRec').setAttribute("aria-label","Record audio"); }
 };
 
 /* ---------------- plans ---------------- */
@@ -705,7 +854,7 @@ async function loadTemplate(){
 function renderTemplate(){
   if (!template){ $('tplBar').innerHTML = ""; return; }
   const n = (template.styles||[]).length;
-  $('tplBar').innerHTML = `<span>&#128196;</span><b>${esc(template.name)}</b>
+  $('tplBar').innerHTML = `<b>${esc(template.name)}</b>
     <span>&middot; ${n} style${n===1?"":"s"} &middot; report will match it</span>
     <button class="x" id="tplDel" title="Remove template">&times;</button>`;
   $('tplDel').onclick = async () => {
@@ -751,6 +900,8 @@ $('btnExport').onclick = async () => {
 };
 
 load().catch(e => say(e.message,"bad"));
+if ("serviceWorker" in navigator) window.addEventListener("load", () =>
+  navigator.serviceWorker.register("/service-worker.js").catch(() => {}));
 </script>
 </body>
 </html>

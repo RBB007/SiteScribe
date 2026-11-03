@@ -1,0 +1,73 @@
+services:
+  - type: web
+    name: sitescribe
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    preDeployCommand: alembic -c migrations/alembic.ini upgrade head
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 4 webapp.cloud_app:app
+    healthCheckPath: /health/live
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: project-files
+      - key: AZURE_TENANT_ID
+        sync: false
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: AUTH_TOKEN_ENCRYPTION_KEYS
+        sync: false
+
+  - type: cron
+    name: sitescribe-file-backup
+    runtime: python
+    schedule: "30 8 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m webapp.cloud.ops.backup_files
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: project-files
+      - key: AWS_BACKUP_BUCKET
+        sync: false
+      - key: AWS_BACKUP_REGION
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+
+  - type: cron
+    name: sitescribe-retention
+    runtime: python
+    schedule: "15 9 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m webapp.cloud.ops.purge_archived
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: project-files

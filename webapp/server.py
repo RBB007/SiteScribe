@@ -1,4 +1,4 @@
-"""SiteScribe — structural site-visit observation tool.
+"""MKA Site-to-Report — structural site-visit observation tool.
 
 Single-file Flask backend. Projects hold a visit; a visit holds items;
 an item is only a numbering group for photo entries, and a photo *entry*
@@ -91,22 +91,32 @@ def require_pin(fn):
 
 
 LOGIN_HTML = """<!DOCTYPE html><html lang=en><head><meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1">
-<title>SiteScribe</title><style>
-:root{--bg:#fff;--fg:#14181d;--mut:#667085;--line:#e4e7ec;--card:#f9fafb;--accent:#1554b8;--bad:#b42318}
-@media(prefers-color-scheme:dark){:root{--bg:#101418;--fg:#e8eaed;--mut:#98a2b3;--line:#272c33;--card:#171b20;--accent:#4d8df0;--bad:#ff8a80}}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;
-background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,-apple-system,sans-serif;padding:24px}
-.box{width:100%;max-width:340px;text-align:center}
-h1{font-size:26px;margin:0 0 4px;letter-spacing:-.02em}h1 span{color:var(--accent)}
-p{color:var(--mut);font-size:14px;margin:0 0 22px}
-input{width:100%;padding:15px;font:600 22px/1 system-ui;text-align:center;letter-spacing:.5em;
-border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--fg);margin-bottom:12px}
-button{width:100%;padding:14px;border:0;border-radius:10px;background:var(--accent);color:#fff;font:600 16px system-ui}
+<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name=theme-color content="#f4f7fb"><meta name=apple-mobile-web-app-capable content=yes>
+<meta name=apple-mobile-web-app-status-bar-style content=black-translucent>
+<link rel=manifest href=/static/manifest.webmanifest><link rel=icon href=/static/app-icon.svg>
+<link rel=stylesheet href=https://use.typekit.net/kzv5htm.css>
+<title>MKA Site-to-Report</title><style>
+:root{color-scheme:light dark;--bg:#f7f7f7;--fg:#222;--mut:#666;--line:#d9dce2;--card:#fff;--accent:#4a597c;--brand:#aaba0a;--bad:#cc2e2e}
+@media(prefers-color-scheme:dark){:root{--bg:#101521;--fg:#fff;--mut:#b9bfcb;--line:#303a50;--card:#161c2b;--accent:#738bc1;--brand:#aaba0a;--bad:#ff8585}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}body{margin:0;min-height:100dvh;display:grid;place-items:center;
+background:var(--bg);color:var(--fg);font:16px/1.5 "futura-pt",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+padding:calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom))}
+.box{width:100%;max-width:350px;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:0;
+padding:30px 22px 22px;box-shadow:0 16px 48px rgba(25,39,66,.09)}
+.mark{width:76px;height:66px;margin:-64px auto 18px;display:grid;place-items:center;border-radius:0;
+background:var(--accent);border-bottom:6px solid var(--brand);box-shadow:0 10px 25px rgba(22,28,43,.22);color:#fff;font-size:24px;font-weight:700;letter-spacing:.06em}
+h1{font-size:26px;margin:0 0 5px;letter-spacing:-.025em}h1 span{color:var(--accent)}
+p{color:var(--mut);font-size:13.5px;margin:0 0 24px}
+input{width:100%;min-height:54px;padding:15px;font:650 22px/1 system-ui;text-align:center;letter-spacing:.5em;
+border:1px solid var(--line);border-radius:0;background:var(--bg);color:var(--fg);margin-bottom:12px;outline:none}
+input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 15%,transparent)}
+button{width:100%;min-height:50px;padding:14px;border:0;border-radius:0;background:var(--accent);color:#fff;font:650 16px "futura-pt",system-ui}
 .err{color:var(--bad);font-size:14px;margin-top:12px}
 </style></head><body><div class=box>
-<h1>Site<span>Scribe</span></h1>
-<p>Structural observation reports from your phone.</p>
+<div class=mark aria-hidden=true>MKA</div>
+<h1>MKA <span>Site-to-Report</span></h1>
+<p>Structural field observations, organized.</p>
 <form method=post>
 <input name=pin type=tel inputmode=numeric maxlength=12 autocomplete=off
        placeholder="PIN" autofocus aria-label="PIN">
@@ -153,7 +163,18 @@ def _no_html_cache(resp):
 
 @app.route("/health")
 def health():
-    return jsonify(status="ok", service="sitescribe", time=_now())
+    return jsonify(status="ok", service="mka-site-to-report", time=_now())
+
+
+@app.route("/service-worker.js")
+def service_worker():
+    """Serve at the origin root so the installed PWA can control every page."""
+    response = send_from_directory(os.path.join(BASE, "static"),
+                                   "service-worker.js",
+                                   mimetype="application/javascript")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Service-Worker-Allowed"] = "/"
+    return response
 
 
 # ---------------------------------------------------------------- storage
@@ -615,6 +636,13 @@ def index():
 @require_project
 def capture():
     return render_template("index.html")
+
+
+@app.route("/overview")
+@require_pin
+@require_project
+def overview():
+    return render_template("overview.html")
 
 
 @app.route("/uploads/<path:relpath>")
@@ -1318,7 +1346,7 @@ def _notice_headers(notice):
     if not notice:
         return {}
     clean = "".join(ch if " " <= ch <= "~" else "?" for ch in notice)[:300]
-    return {"X-SiteScribe-Report-Notice": clean}
+    return {"X-MKA-Report-Notice": clean}
 
 
 def _export_snapshot(pid):

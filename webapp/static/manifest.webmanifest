@@ -1,0 +1,18 @@
+{
+  "name": "MKA Site-to-Report",
+  "short_name": "MKA Report",
+  "description": "Capture structural field observations and turn them into reports.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F5F5F3",
+  "theme_color": "#16181D",
+  "icons": [
+    {
+      "src": "/static/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

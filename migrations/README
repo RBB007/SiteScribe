@@ -1,0 +1,14 @@
+SiteScribe database migrations
+==============================
+
+The migration environment reads ``DATABASE_URL`` and normalizes Render's
+``postgres://`` alias to SQLAlchemy's psycopg 3 driver. Production migrations
+target PostgreSQL. SQLite is supported for unit tests and local schema checks;
+PostgreSQL supplies native UUID storage while SQLAlchemy's portable ``Uuid``
+type preserves the same Python interface on SQLite.
+
+Commands (after Alembic and psycopg are installed by the dependency task):
+
+    alembic -c migrations/alembic.ini upgrade head
+    alembic -c migrations/alembic.ini downgrade base
+

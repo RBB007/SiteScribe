@@ -1,9 +1,9 @@
-# SiteScribe — item capture web app (Flask)
+# MKA Site-to-Report — item capture web app (Flask)
 
 A phone-first capture UI built to the **App Workflow** slide and the notebook
 sketch: an Item navigator over a photo, a Photo navigator under it.
 
-> **Note for the team:** this Flask app is the main SiteScribe app. The
+> **Note for the team:** this Flask app is the main MKA Site-to-Report app. The
 > Streamlit app that used to live on `main` is retired. The `sitescribe/`
 > modules plug in behind these routes; see [INTEGRATION_PLAN.md](../INTEGRATION_PLAN.md).
 > From the repo root, `python run.py` starts this same server.
@@ -58,7 +58,7 @@ plan sheets, one ITEM block per included entry with its photo and caption,
 action items, photo log. Only plans with a pin are rendered. If the module
 raises, the traceback is logged to stderr and the built-in python-docx report
 below ships instead, so the user always gets a file; the response then carries
-an `X-SiteScribe-Report-Notice` header saying why.
+an `X-MKA-Report-Notice` header saying why.
 
 The **Export** button uses two requests so a phone sees progress and a real
 error instead of a blank tab: `POST /api/export/build` builds the bundle zip
