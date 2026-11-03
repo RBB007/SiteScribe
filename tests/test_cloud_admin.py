@@ -1,4 +1,3 @@
-import io
 from types import SimpleNamespace
 
 from flask import Flask
@@ -46,15 +45,11 @@ def test_admin_api_returns_json_when_session_is_missing(tmp_path):
     assert response.json["error"] == "authentication required"
 
 
-def test_admin_uploads_encrypted_key_instructions_and_template(tmp_path, monkeypatch):
+def test_admin_stores_encrypted_claude_key(tmp_path, monkeypatch):
     monkeypatch.setenv("FLASK_SECRET_KEY", "unit-test-encryption-secret")
     client, store = client_for(tmp_path, "admin")
-    response = client.post("/api/admin/settings", data={
-        "api_key": "sk-ant-private",
-        "agents": (io.BytesIO(b"# Report instructions"), "AGENTS.md"),
-        "template": (io.BytesIO(b"PK fake docx"), "MKA.docx"),
-    })
+    response = client.post("/api/admin/settings", data={"api_key": "sk-ant-private"})
     assert response.status_code == 200
     assert load_secret(store, "workspace-1") == "sk-ant-private"
     status = client.get("/api/admin/settings").json
-    assert status == {"agents": True, "secret": True, "template": True}
+    assert status == {"secret": True}

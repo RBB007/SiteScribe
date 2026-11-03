@@ -1,6 +1,10 @@
 from datetime import date
+from pathlib import Path
 
 from webapp.cloud.report_output import create_outputs
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_report_output_creates_word_and_pdf(tmp_path):
@@ -26,3 +30,11 @@ def test_report_output_creates_word_and_pdf(tmp_path):
 
     assert docx.read_bytes().startswith(b"PK")
     assert pdf.read_bytes().startswith(b"%PDF")
+
+
+def test_report_assets_are_versioned_with_the_application():
+    instructions = ROOT / "webapp/report_assets/AGENTS.md"
+    template = ROOT / "MKA Report Template/MKA Site Visit Observation Template.docx"
+
+    assert "Never invent" in instructions.read_text("utf-8")
+    assert template.is_file()

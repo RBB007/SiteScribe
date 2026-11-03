@@ -6,7 +6,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
-from webapp.cloud.admin import download_template, load_secret, load_text
+from webapp.cloud.admin import load_secret
 from webapp.cloud.db.models import File
 from webapp.cloud.report_agent import draft_report
 from webapp.cloud.report_output import create_outputs
@@ -30,13 +30,12 @@ def generate(database, store, user, project, visit, observations, photo_files, r
                 photo_paths.setdefault(row["observation_id"], []).append(destination)
                 evidence.append((row["observation_id"], destination, row["mime_type"]))
             api_key = load_secret(store, user.workspace_id)
-            instructions = load_text(store, user.workspace_id)
-            template = download_template(store, user.workspace_id, root / "report_template.docx")
+            instructions = (Path(__file__).resolve().parent.parent / "report_assets" / "AGENTS.md").read_text("utf-8")
             drafted = draft_report(
                 project_data, visit_data, observations, evidence, api_key, instructions
             )
             docx, pdf = create_outputs(
-                project_data, visit_data, observations, drafted, photo_paths, root, template
+                project_data, visit_data, observations, drafted, photo_paths, root
             )
             outputs = [
                 ("Word report", docx.name, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", docx.read_bytes()),
