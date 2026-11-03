@@ -52,17 +52,38 @@ def create_capture_blueprint(database, auth, store) -> Blueprint:
     @guarded
     def create_item(visit_id):
         body = request.get_json(silent=True) or {}
+        item_id, error = _client_id(body.get("id"))
+        if error:
+            return error
+        observation_id, error = _client_id(body.get("observation_id"))
+        if error:
+            return error
         with database.transaction() as db:
             visit = _visit(db, visit_id)
+            if item_id is not None:
+                existing = db.get(Item, item_id)
+                if existing is not None:
+                    # Offline replay: the phone generated this ID, so a second
+                    # request with it is the same item, not a new one.
+                    if existing.visit_id != visit.id:
+                        return jsonify(error="item id already in use"), 409
+                    return jsonify(_item_json(existing)), 200
+            if observation_id is not None and db.get(Observation, observation_id):
+                return jsonify(error="observation id already in use"), 409
             last = db.execute(select(
                 func.coalesce(func.max(Item.number), 0),
                 func.coalesce(func.max(Item.position), 0),
             ).where(Item.visit_id == visit.id)).one()
             item = Item(visit_id=visit.id, number=last[0] + 1, position=last[1] + 1)
+            if item_id is not None:
+                item.id = item_id
             db.add(item)
             db.flush()
-            if body.get("create_observation"):
-                db.add(Observation(item_id=item.id, sequence=1, description=""))
+            if body.get("create_observation") or observation_id is not None:
+                first = Observation(item_id=item.id, sequence=1, description="")
+                if observation_id is not None:
+                    first.id = observation_id
+                db.add(first)
                 db.flush()
             return jsonify(_item_json(item)), 201
 
@@ -94,6 +115,9 @@ def create_capture_blueprint(database, auth, store) -> Blueprint:
     @guarded
     def create_observation(visit_id, item_id):
         body = request.get_json(silent=True) or {}
+        observation_id, error = _client_id(body.get("id"))
+        if error:
+            return error
         with database.transaction() as db:
             visit = _visit(db, visit_id)
             item = db.scalar(select(Item).where(
@@ -101,6 +125,12 @@ def create_capture_blueprint(database, auth, store) -> Blueprint:
             ))
             if item is None:
                 return jsonify(error="item not found"), 404
+            if observation_id is not None:
+                existing = db.get(Observation, observation_id)
+                if existing is not None:
+                    if existing.item_id != item.id:
+                        return jsonify(error="observation id already in use"), 409
+                    return jsonify(_observation_json(existing)), 200
             sequence = db.scalar(select(func.coalesce(func.max(Observation.sequence), 0))
                                  .where(Observation.item_id == item.id)) + 1
             observation = Observation(
@@ -112,6 +142,8 @@ def create_capture_blueprint(database, auth, store) -> Blueprint:
                 plan_page=body.get("plan_page"), plan_x=body.get("plan_x"),
                 plan_y=body.get("plan_y"),
             )
+            if observation_id is not None:
+                observation.id = observation_id
             db.add(observation)
             db.flush()
             return jsonify(_observation_json(observation)), 201
@@ -151,6 +183,8 @@ def create_capture_blueprint(database, auth, store) -> Blueprint:
             size=len(payload),
         )
         file_id = uuid.uuid4()
+        digest = hashlib.sha256(payload).hexdigest()
+        kind = request.form.get("kind", "photo")
         uploaded_key = None
         try:
             with database.transaction() as db:
@@ -162,6 +196,12 @@ def create_capture_blueprint(database, auth, store) -> Blueprint:
                 )
                 if observation is None:
                     return jsonify(error="observation not found"), 404
+                for link in observation.file_links:
+                    # Offline replay: the first attempt reached the server but
+                    # its response was lost. Return the stored file instead of
+                    # attaching a second copy.
+                    if link.file.sha256 == digest and link.file.kind == kind:
+                        return jsonify(_file_json(link.file)), 200
                 uploaded_key = build_private_key(
                     workspace_id=g.cloud_user.workspace_id,
                     project_id=visit.project_id,
@@ -173,10 +213,10 @@ def create_capture_blueprint(database, auth, store) -> Blueprint:
                 record = File(
                     id=file_id, workspace_id=g.cloud_user.workspace_id,
                     project_id=visit.project_id, visit_id=visit.id,
-                    kind=request.form.get("kind", "photo"),
+                    kind=kind,
                     storage_key=uploaded_key, mime_type=metadata.content_type,
                     size_bytes=metadata.size,
-                    sha256=hashlib.sha256(payload).hexdigest(),
+                    sha256=digest,
                     original_filename=metadata.filename,
                     created_by_id=g.cloud_user.profile_id,
                 )
@@ -187,12 +227,7 @@ def create_capture_blueprint(database, auth, store) -> Blueprint:
                     position=len(observation.file_links),
                 ))
                 db.flush()
-                result = {
-                    "id": str(record.id), "kind": record.kind,
-                    "filename": record.original_filename,
-                    "mime_type": record.mime_type, "size": record.size_bytes,
-                    "download_url": f"/api/files/{record.id}",
-                }
+                result = _file_json(record)
             return jsonify(result), 201
         except Exception:
             if uploaded_key is not None:
@@ -214,6 +249,25 @@ def _visit(db, value):
         from werkzeug.exceptions import NotFound
         raise NotFound("visit not found")
     return visit
+
+
+def _client_id(value):
+    """Parse an optional phone-generated UUID. Returns (uuid | None, error)."""
+    if value in (None, ""):
+        return None, None
+    parsed = _uuid(str(value))
+    if parsed is None:
+        return None, (jsonify(error="id must be a UUID"), 400)
+    return parsed, None
+
+
+def _file_json(record):
+    return {
+        "id": str(record.id), "kind": record.kind,
+        "filename": record.original_filename,
+        "mime_type": record.mime_type, "size": record.size_bytes,
+        "download_url": f"/api/files/{record.id}",
+    }
 
 
 def _uuid(value):

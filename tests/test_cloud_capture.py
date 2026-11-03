@@ -120,3 +120,81 @@ def test_deleting_item_removes_its_private_files(tmp_path):
     assert deleted.status_code == 204
     assert store.objects == {}
     assert client.get(f"/api/visits/{visit_id}/items").json == []
+
+
+def test_offline_item_create_with_client_ids_is_idempotent(tmp_path):
+    client, _store, visit_id = setup_app(tmp_path)
+    item_id, observation_id = str(uuid.uuid4()), str(uuid.uuid4())
+    body = {"id": item_id, "observation_id": observation_id, "create_observation": True}
+    first = client.post(f"/api/visits/{visit_id}/items", json=body)
+    assert first.status_code == 201
+    assert first.json["id"] == item_id
+    assert first.json["observations"][0]["id"] == observation_id
+    replay = client.post(f"/api/visits/{visit_id}/items", json=body)
+    assert replay.status_code == 200
+    assert replay.json["id"] == item_id
+    items = client.get(f"/api/visits/{visit_id}/items").json
+    assert [value["id"] for value in items] == [item_id]
+    assert len(items[0]["observations"]) == 1
+
+
+def test_offline_items_get_server_numbers_in_sync_order(tmp_path):
+    client, _store, visit_id = setup_app(tmp_path)
+    online = client.post(f"/api/visits/{visit_id}/items", json={"create_observation": True})
+    queued = client.post(
+        f"/api/visits/{visit_id}/items",
+        json={"id": str(uuid.uuid4()), "observation_id": str(uuid.uuid4())},
+    )
+    assert (online.json["number"], queued.json["number"]) == (1, 2)
+    assert len(queued.json["observations"]) == 1
+
+
+def test_client_ids_are_validated_and_not_reused_across_visits(tmp_path):
+    client, _store, visit_id = setup_app(tmp_path)
+    bad = client.post(f"/api/visits/{visit_id}/items", json={"id": "not-a-uuid"})
+    assert bad.status_code == 400
+    item = client.post(f"/api/visits/{visit_id}/items", json={"create_observation": True}).json
+    taken = client.post(
+        f"/api/visits/{visit_id}/items",
+        json={"id": str(uuid.uuid4()), "observation_id": item["observations"][0]["id"]},
+    )
+    assert taken.status_code == 409
+    other_item = client.post(f"/api/visits/{visit_id}/items").json
+    reused = client.post(
+        f"/api/visits/{visit_id}/items/{other_item['id']}/observations",
+        json={"id": item["observations"][0]["id"]},
+    )
+    assert reused.status_code == 409
+
+
+def test_observation_create_with_client_id_is_idempotent(tmp_path):
+    client, _store, visit_id = setup_app(tmp_path)
+    item = client.post(f"/api/visits/{visit_id}/items").json
+    observation_id = str(uuid.uuid4())
+    url = f"/api/visits/{visit_id}/items/{item['id']}/observations"
+    first = client.post(url, json={"id": observation_id, "description": "Spall"})
+    replay = client.post(url, json={"id": observation_id, "description": "Spall"})
+    assert (first.status_code, replay.status_code) == (201, 200)
+    assert first.json["id"] == replay.json["id"] == observation_id
+    items = client.get(f"/api/visits/{visit_id}/items").json
+    assert len(items[0]["observations"]) == 1
+
+
+def test_replayed_upload_returns_existing_file_without_duplicate(tmp_path):
+    client, store, visit_id = setup_app(tmp_path)
+    item = client.post(f"/api/visits/{visit_id}/items", json={"create_observation": True}).json
+    url = f"/api/visits/{visit_id}/observations/{item['observations'][0]['id']}/files"
+
+    def upload(payload, kind="photo"):
+        return client.post(url, data={
+            "kind": kind, "file": (io.BytesIO(payload), "field.jpg", "image/jpeg"),
+        })
+
+    first, replay = upload(b"same-photo"), upload(b"same-photo")
+    assert (first.status_code, replay.status_code) == (201, 200)
+    assert first.json["id"] == replay.json["id"]
+    assert len(store.objects) == 1
+    assert upload(b"different-photo").status_code == 201
+    assert len(store.objects) == 2
+    files = client.get(f"/api/visits/{visit_id}/items").json[0]["observations"][0]["files"]
+    assert len(files) == 2
