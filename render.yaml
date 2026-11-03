@@ -21,10 +21,8 @@ services:
         sync: false
       - key: SUPABASE_STORAGE_BUCKET
         value: project-files
-      - key: AZURE_TENANT_ID
-        sync: false
       - key: BOOTSTRAP_ADMIN_EMAIL
-        sync: false
+        value: amourougassamy@mka.com
       - key: APP_BASE_URL
         sync: false
       - key: FLASK_SECRET_KEY

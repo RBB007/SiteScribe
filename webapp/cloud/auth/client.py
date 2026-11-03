@@ -58,6 +58,15 @@ class SupabaseAuthClient:
             {"auth_code": code, "code_verifier": verifier},
         ))
 
+    def password_sign_in(self, email: str, password: str) -> AuthSession:
+        normalized_email = str(email or "").strip().lower()
+        if not normalized_email or not password:
+            raise AuthError("Email and password are required.")
+        return _session(self._post(
+            "/auth/v1/token?grant_type=password",
+            {"email": normalized_email, "password": password},
+        ))
+
     def refresh(self, refresh_token: str) -> AuthSession:
         if not refresh_token:
             raise AuthError("Your session has expired.")
@@ -103,7 +112,7 @@ def _user(data: dict[str, Any]) -> AuthUser:
     user_id = str(data.get("id") or "")
     email = str(data.get("email") or "").strip().lower()
     if not user_id or not email:
-        raise AuthError("Microsoft did not provide a usable user identity.")
+        raise AuthError("The authentication service did not provide a usable identity.")
     app = data.get("app_metadata") if isinstance(data.get("app_metadata"), dict) else {}
     meta = data.get("user_metadata") if isinstance(data.get("user_metadata"), dict) else {}
     return AuthUser(user_id, email, str(app.get("provider") or ""), dict(meta))
@@ -121,4 +130,3 @@ def _session(data: dict[str, Any]) -> AuthSession:
     user_data = data.get("user") if isinstance(data.get("user"), dict) else {}
     return AuthSession(access, refresh, max(1, expires),
                        str(data.get("token_type") or "bearer"), _user(user_data))
-

@@ -1,10 +1,10 @@
-"""Flask routes and request guard for Microsoft sign-in through Supabase."""
+"""Flask routes and request guard for Supabase email/password sign-in."""
 
 from __future__ import annotations
 
 import functools
 
-from flask import Blueprint, g, jsonify, redirect, request, session
+from flask import Blueprint, g, jsonify, redirect, render_template_string, request, session
 
 from .client import AuthError, SupabaseAuthClient
 from .pkce import create_pkce_pair
@@ -13,18 +13,50 @@ from .service import AuthenticationService, SignInRejected
 
 SESSION_KEY = "cloud_sid"
 
+LOGIN_HTML = """<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sign in - SiteScribe</title><style>
+:root{font:16px/1.5 system-ui;color:#182132;background:#f3f6fa}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px}
+main{width:min(100%,380px);background:white;border:1px solid #dce3ec;border-radius:18px;padding:26px}
+h1{margin:0 0 6px}.muted{color:#66758a;margin:0 0 22px}
+label{display:block;margin:13px 0 5px;font-weight:650}input,button{width:100%;font:inherit;padding:12px;
+border:1px solid #b9c5d4;border-radius:9px}button{margin-top:18px;background:#1769e0;color:white;border:0;font-weight:700}
+.error{color:#a62d25;margin-top:14px}</style></head><body><main>
+<h1>SiteScribe</h1><p class="muted">Trial account sign in</p>
+<form method="post"><label for="email">Email</label>
+<input id="email" name="email" type="email" autocomplete="username" required autofocus>
+<label for="password">Password</label>
+<input id="password" name="password" type="password" autocomplete="current-password" required>
+<button type="submit">Sign in</button></form>
+{% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
+</main></body></html>"""
+
 
 def create_auth_blueprint(
     client: SupabaseAuthClient, service: AuthenticationService
 ) -> Blueprint:
     blueprint = Blueprint("cloud_auth", __name__)
 
-    @blueprint.get("/auth/login")
+    @blueprint.route("/auth/login", methods=["GET", "POST"])
     def login():
-        pair = create_pkce_pair()
-        session["oauth_state"] = pair.state
-        session["oauth_verifier"] = pair.verifier
-        return redirect(client.authorization_url(pair))
+        if request.method == "GET":
+            return render_template_string(LOGIN_HTML, error=None)
+        try:
+            provider_session = client.password_sign_in(
+                request.form.get("email", ""), request.form.get("password", "")
+            )
+            signed_in = service.establish(provider_session.user, provider_session)
+        except AuthError:
+            return render_template_string(
+                LOGIN_HTML, error="Incorrect email or password."
+            ), 401
+        except SignInRejected as exc:
+            return render_template_string(LOGIN_HTML, error=str(exc)), 403
+        session.clear()
+        session.permanent = True
+        session[SESSION_KEY] = signed_in.opaque_session_id
+        return redirect("/pending" if signed_in.status != "active" else "/")
 
     @blueprint.get("/auth/callback")
     def callback():

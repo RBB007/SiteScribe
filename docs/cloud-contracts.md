@@ -2,7 +2,8 @@
 
 ## Locked product decisions
 
-- One company workspace and one Microsoft Entra tenant.
+- One company workspace. The trial uses Supabase email/password accounts;
+  Microsoft Entra SSO can be enabled later without changing application profiles.
 - Roles are `admin` and `member`; all active members access all projects.
 - Projects sort by `lower(name), id`; visits sort by `visit_date DESC, created_at DESC, id`.
 - Production starts empty. Existing demo data is not imported.
@@ -11,7 +12,7 @@
 
 ## HTTP surface
 
-- Auth: `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout`, `GET /api/me`.
+- Auth: `GET/POST /auth/login`, `POST /auth/logout`, `GET /api/me`.
 - Members: `GET /api/members`, `PATCH /api/members/{member_id}` (admin only).
 - Projects: `GET/POST /api/projects`, `GET/PATCH/DELETE /api/projects/{project_id}`, `POST /api/projects/{project_id}/restore`.
 - Visits: `GET/POST /api/projects/{project_id}/visits`, `GET/PATCH/DELETE /api/projects/{project_id}/visits/{visit_id}`, `POST /api/projects/{project_id}/visits/{visit_id}/restore`.
@@ -28,7 +29,6 @@
 - `SUPABASE_PUBLISHABLE_KEY`
 - `SUPABASE_SECRET_KEY`
 - `SUPABASE_STORAGE_BUCKET=project-files`
-- `AZURE_TENANT_ID`
 - `BOOTSTRAP_ADMIN_EMAIL`
 - `APP_BASE_URL`
 - `FLASK_SECRET_KEY`
