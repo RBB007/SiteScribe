@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 
-from flask import Flask, g, jsonify, render_template
+from flask import Flask, g, jsonify, render_template, send_from_directory
 from sqlalchemy import text
 
 from webapp.cloud.api import create_api_blueprint
@@ -75,6 +75,15 @@ def create_app() -> Flask:
     @require_cloud_user(auth, redirect_to_login=True)
     def visit_overview(visit_id):
         return render_template("cloud_visit_overview.html", visit_id=visit_id, user=g.cloud_user)
+
+    @app.get("/service-worker.js")
+    def service_worker():
+        response = send_from_directory(
+            app.static_folder, "service-worker.js", mimetype="application/javascript"
+        )
+        response.headers["Cache-Control"] = "no-cache"
+        response.headers["Service-Worker-Allowed"] = "/"
+        return response
 
     @app.errorhandler(413)
     def too_large(_exc):
